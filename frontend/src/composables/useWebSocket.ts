@@ -12,6 +12,10 @@ const MAX_RECONNECT_DELAY = 10_000
 const BASE_DELAY = 500
 const listeners = new Set<WsCallback>()
 
+// Track connection-loss and restoration for notifications
+let wasConnected = false
+const connectionCallbacks = new Set<(state: 'connected' | 'disconnected') => void>()
+
 function getWsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${location.host}/api/ws`
@@ -32,11 +36,20 @@ function connect() {
   ws.onopen = () => {
     connected.value = true
     reconnectAttempt = 0
+    if (wasConnected) {
+      // Reconnected after a drop
+      for (const cb of connectionCallbacks) cb('connected')
+    }
+    wasConnected = true
   }
 
   ws.onclose = () => {
+    const wasOpen = connected.value
     connected.value = false
     ws = null
+    if (wasOpen) {
+      for (const cb of connectionCallbacks) cb('disconnected')
+    }
     scheduleReconnect()
   }
 
@@ -85,6 +98,13 @@ function subscribe(cb: WsCallback): () => void {
   }
 }
 
+function onConnectionChange(cb: (state: 'connected' | 'disconnected') => void): () => void {
+  connectionCallbacks.add(cb)
+  return () => {
+    connectionCallbacks.delete(cb)
+  }
+}
+
 function disconnect() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
@@ -105,5 +125,6 @@ export function useWebSocket() {
     disconnect,
     send,
     subscribe,
+    onConnectionChange,
   }
 }

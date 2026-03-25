@@ -8,6 +8,8 @@ import type {
   StepStatus,
 } from '../types'
 import { useWebSocket } from './useWebSocket'
+import { useToast } from './useToast'
+import { useExperiments } from './useExperiments'
 
 export function useExperimentDetail(experimentId: () => string | null) {
   const experiment = ref<Experiment | null>(null)
@@ -21,6 +23,8 @@ export function useExperimentDetail(experimentId: () => string | null) {
   const pipelineRunning = ref(false)
 
   const { subscribe, send } = useWebSocket()
+  const toast = useToast()
+  const { fetchExperiments } = useExperiments()
 
   const anyStepRunning = computed(() => {
     if (!experiment.value) return false
@@ -74,6 +78,7 @@ export function useExperimentDetail(experimentId: () => string | null) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch (e) {
       error.value = (e as Error).message
+      toast.error(`Failed to run step "${stepName}"`)
       if (step) step.status = 'pending' as StepStatus
     }
   }
@@ -120,8 +125,10 @@ export function useExperimentDetail(experimentId: () => string | null) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const exp: Experiment = await res.json()
       experiment.value = exp
+      toast.success(`Step "${name}" added`)
     } catch (e) {
       error.value = (e as Error).message
+      toast.error(`Failed to add step "${name}"`)
     }
   }
 
@@ -149,6 +156,7 @@ export function useExperimentDetail(experimentId: () => string | null) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch (e) {
       error.value = (e as Error).message
+      toast.error('Failed to start pipeline')
       pipelineRunning.value = false
     }
   }
@@ -187,6 +195,14 @@ export function useExperimentDetail(experimentId: () => string | null) {
         const step = findStep(msg.step_name)
         if (step) step.status = msg.status as StepStatus
         fetchResults(id)
+        // Also refresh experiment list so sidebar status updates
+        fetchExperiments()
+        // Toast notification
+        if (msg.status === 'completed') {
+          toast.success(`Step "${msg.step_name}" completed (${msg.duration_s.toFixed(1)}s)`)
+        } else {
+          toast.error(`Step "${msg.step_name}" failed`)
+        }
         break
       }
 
@@ -225,6 +241,8 @@ export function useExperimentDetail(experimentId: () => string | null) {
         // Re-fetch full experiment to sync statuses
         fetchExperiment(id)
         fetchResults(id)
+        fetchExperiments()
+        toast.success('Pipeline finished')
         break
       }
     }

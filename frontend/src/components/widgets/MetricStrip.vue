@@ -13,15 +13,48 @@ function fmt(v: number | string): string {
 </script>
 
 <template>
-  <div class="flex flex-wrap gap-1.5 col-span-full">
+  <div class="metric-strip">
     <div
       v-for="(value, key) in data"
       :key="key"
-      class="flex items-center gap-2 px-2.5 py-1.5"
-      style="background: var(--color-bg1); border-radius: 2px"
+      class="metric-strip__chip"
     >
-      <span class="text-xs" style="color: var(--color-fg-muted)">{{ key }}</span>
-      <span class="text-sm font-mono font-medium" style="color: var(--color-fg)">{{ fmt(value) }}</span>
+      <span class="metric-strip__key">{{ key }}</span>
+      <span class="metric-strip__value">{{ fmt(value) }}</span>
     </div>
   </div>
 </template>
+
+<style scoped>
+.metric-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.metric-strip__chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  background: var(--c-bg1);
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.metric-strip__chip:hover {
+  background: var(--c-surface-hover);
+}
+
+.metric-strip__key {
+  font-size: 0.75rem;
+  color: var(--c-fg-muted);
+}
+
+.metric-strip__value {
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--c-fg);
+}
+</style>

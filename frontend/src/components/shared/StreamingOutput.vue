@@ -8,16 +8,20 @@ const props = defineProps<{
 const container = ref<HTMLDivElement | null>(null)
 const autoScroll = ref(true)
 
-// ANSI SGR code -> inline style
-const ansiMap: Record<string, string> = {
-  '0': '',
-  '1': 'font-weight:bold',
-  '30': 'color:#282828', '31': 'color:#fb4934', '32': 'color:#b8bb26',
-  '33': 'color:#fabd2f', '34': 'color:#83a598', '35': 'color:#d3869b',
-  '36': 'color:#8ec07c', '37': 'color:#ebdbb2',
-  '90': 'color:#928374', '91': 'color:#fb4934', '92': 'color:#b8bb26',
-  '93': 'color:#fabd2f', '94': 'color:#83a598', '95': 'color:#d3869b',
-  '96': 'color:#8ec07c', '97': 'color:#ebdbb2',
+// ANSI SGR code -> inline style (theme-aware)
+function ansiStyle(code: string): string {
+  switch (code) {
+    case '1': return 'font-weight:bold'
+    case '30': return 'color:var(--c-bg)';    case '31': return 'color:var(--c-red)'
+    case '32': return 'color:var(--c-green)';  case '33': return 'color:var(--c-yellow)'
+    case '34': return 'color:var(--c-aqua)';   case '35': return 'color:var(--c-purple)'
+    case '36': return 'color:var(--c-aqua)';   case '37': return 'color:var(--c-fg)'
+    case '90': return 'color:var(--c-fg-dim)'; case '91': return 'color:var(--c-red)'
+    case '92': return 'color:var(--c-green)';  case '93': return 'color:var(--c-yellow)'
+    case '94': return 'color:var(--c-aqua)';   case '95': return 'color:var(--c-purple)'
+    case '96': return 'color:var(--c-aqua)';   case '97': return 'color:var(--c-fg)'
+    default: return ''
+  }
 }
 
 function esc(t: string): string {
@@ -37,9 +41,12 @@ function parseAnsi(text: string): string {
     for (const c of m[1].split(';').filter(Boolean)) {
       if (c === '0') {
         while (open > 0) { out += '</span>'; open-- }
-      } else if (ansiMap[c]) {
-        out += `<span style="${ansiMap[c]}">`
-        open++
+      } else {
+        const style = ansiStyle(c)
+        if (style) {
+          out += `<span style="${style}">`
+          open++
+        }
       }
     }
   }
@@ -66,18 +73,29 @@ onMounted(scrollToBottom)
 <template>
   <div
     ref="container"
-    class="font-mono text-xs leading-5 overflow-y-auto"
-    style="
-      background: var(--color-bg-hard);
-      color: var(--color-fg2);
-      max-height: 320px;
-      min-height: 32px;
-      padding: 6px 8px;
-      border-radius: 2px;
-    "
+    class="streaming-output"
     @scroll="onScroll"
   >
-    <div v-if="lines.length === 0" style="color: var(--color-fg-dim)">No output yet</div>
+    <div v-if="lines.length === 0" class="streaming-output__empty">No output yet</div>
     <div v-for="(line, i) in lines" :key="i" v-html="parseAnsi(line)" />
   </div>
 </template>
+
+<style scoped>
+.streaming-output {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.4rem;
+  overflow-y: auto;
+  background: var(--c-bg-hard);
+  color: var(--c-fg2);
+  max-height: 20rem;
+  min-height: 2rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.streaming-output__empty {
+  color: var(--c-fg-dim);
+}
+</style>

@@ -219,3 +219,22 @@ export interface TerminalEntry {
 // ---------------------------------------------------------------------------
 
 export type SortField = 'name' | 'updated_at' | 'created_at' | 'status'
+
+// ---------------------------------------------------------------------------
+// Toast notification types
+// ---------------------------------------------------------------------------
+
+export type ToastType = 'success' | 'error' | 'info'
+
+export interface Toast {
+  id: number
+  type: ToastType
+  message: string
+  duration: number
+}
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
+
+export type ThemeMode = 'light' | 'dark'

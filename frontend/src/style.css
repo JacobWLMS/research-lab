@@ -1,35 +1,133 @@
 @import "tailwindcss";
 
 @theme {
-  /* Gruvbox Hard Dark Backgrounds */
-  --color-bg-hard: #1d2021;
-  --color-bg: #282828;
-  --color-bg1: #3c3836;
-  --color-bg2: #504945;
-  --color-bg3: #665c54;
-
-  /* Gruvbox Foreground / Text */
-  --color-fg: #ebdbb2;
-  --color-fg2: #d5c4a1;
-  --color-fg-muted: #a89984;
-  --color-fg-dim: #928374;
-
-  /* Gruvbox Accent Colors */
-  --color-aqua: #83a598;
-  --color-green: #b8bb26;
-  --color-yellow: #fabd2f;
-  --color-red: #fb4934;
-  --color-orange: #fe8019;
-  --color-purple: #d3869b;
-  --color-blue: #458588;
-
-  /* Design tokens */
+  /* ---- Design tokens (theme-independent) ---- */
   --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
   --transition-snap: 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+  --transition-smooth: 0.2s cubic-bezier(0.15, 0.9, 0.25, 1);
 
   /* Font stacks */
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ===========================================================================
+   CSS Custom Properties -- Theme System
+   =========================================================================== */
+
+:root,
+[data-theme="dark"] {
+  /* Gruvbox Hard Dark Backgrounds */
+  --c-bg-hard: #1d2021;
+  --c-bg: #282828;
+  --c-bg1: #3c3836;
+  --c-bg2: #504945;
+  --c-bg3: #665c54;
+
+  /* Gruvbox Foreground / Text */
+  --c-fg: #ebdbb2;
+  --c-fg2: #d5c4a1;
+  --c-fg-muted: #a89984;
+  --c-fg-dim: #928374;
+
+  /* Accent Colors */
+  --c-aqua: #83a598;
+  --c-green: #b8bb26;
+  --c-yellow: #fabd2f;
+  --c-red: #fb4934;
+  --c-orange: #fe8019;
+  --c-purple: #d3869b;
+  --c-blue: #458588;
+
+  /* Derived UI tokens */
+  --c-border: #504945;
+  --c-border-subtle: #3c3836;
+  --c-surface: #282828;
+  --c-surface-hover: #3c3836;
+  --c-surface-active: #504945;
+  --c-overlay: rgba(29, 32, 33, 0.92);
+
+  /* Scrollbar */
+  --c-scrollbar-thumb: #504945;
+  --c-scrollbar-thumb-hover: #665c54;
+
+  /* Selection */
+  --c-selection-bg: #83a598;
+  --c-selection-fg: #1d2021;
+
+  /* CodeMirror overrides */
+  --c-cm-bg: #1d2021;
+  --c-cm-gutter: #1d2021;
+  --c-cm-gutter-fg: #665c54;
+  --c-cm-active-line: #28282860;
+  --c-cm-cursor: #83a598;
+  --c-cm-selection: #3c383660;
+
+  /* Plotly overrides */
+  --c-plot-paper: #282828;
+  --c-plot-bg: #1d2021;
+  --c-plot-font: #ebdbb2;
+  --c-plot-grid: #3c3836;
+  --c-plot-zeroline: #504945;
+  --c-plot-axis: #a89984;
+}
+
+[data-theme="light"] {
+  /* Gruvbox Light Backgrounds */
+  --c-bg-hard: #f9f5d7;
+  --c-bg: #fbf1c7;
+  --c-bg1: #f2e5bc;
+  --c-bg2: #d5c4a1;
+  --c-bg3: #bdae93;
+
+  /* Gruvbox Light Foreground / Text */
+  --c-fg: #3c3836;
+  --c-fg2: #504945;
+  --c-fg-muted: #665c54;
+  --c-fg-dim: #928374;
+
+  /* Accent Colors (adjusted for light bg contrast) */
+  --c-aqua: #427b58;
+  --c-green: #79740e;
+  --c-yellow: #b57614;
+  --c-red: #cc241d;
+  --c-orange: #af3a03;
+  --c-purple: #8f3f71;
+  --c-blue: #076678;
+
+  /* Derived UI tokens */
+  --c-border: #d5c4a1;
+  --c-border-subtle: #e8deb5;
+  --c-surface: #fbf1c7;
+  --c-surface-hover: #f2e5bc;
+  --c-surface-active: #d5c4a1;
+  --c-overlay: rgba(249, 245, 215, 0.94);
+
+  /* Scrollbar */
+  --c-scrollbar-thumb: #d5c4a1;
+  --c-scrollbar-thumb-hover: #bdae93;
+
+  /* Selection */
+  --c-selection-bg: #427b58;
+  --c-selection-fg: #f9f5d7;
+
+  /* CodeMirror overrides */
+  --c-cm-bg: #f9f5d7;
+  --c-cm-gutter: #f9f5d7;
+  --c-cm-gutter-fg: #bdae93;
+  --c-cm-active-line: #f2e5bc80;
+  --c-cm-cursor: #427b58;
+  --c-cm-selection: #d5c4a160;
+
+  /* Plotly overrides */
+  --c-plot-paper: #fbf1c7;
+  --c-plot-bg: #f9f5d7;
+  --c-plot-font: #3c3836;
+  --c-plot-grid: #e8deb5;
+  --c-plot-zeroline: #d5c4a1;
+  --c-plot-axis: #665c54;
 }
 
 /* ---- Base resets ---- */
@@ -43,14 +141,15 @@ html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
 }
 
 body {
   margin: 0;
-  background: var(--color-bg-hard);
-  color: var(--color-fg);
+  background: var(--c-bg-hard);
+  color: var(--c-fg);
   line-height: 1.5;
-  font-size: 14px;
+  transition: background var(--transition-smooth), color var(--transition-smooth);
 }
 
 /* ---- Scrollbar ---- */
@@ -64,29 +163,29 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-bg2);
+  background: var(--c-scrollbar-thumb);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-bg3);
+  background: var(--c-scrollbar-thumb-hover);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-bg2) transparent;
+  scrollbar-color: var(--c-scrollbar-thumb) transparent;
 }
 
 /* ---- Selection ---- */
 ::selection {
-  background: var(--color-aqua);
-  color: var(--color-bg-hard);
+  background: var(--c-selection-bg);
+  color: var(--c-selection-fg);
 }
 
 /* ---- Focus ---- */
 :focus-visible {
-  outline: 1px solid var(--color-aqua);
+  outline: 1px solid var(--c-aqua);
   outline-offset: 1px;
 }
 
@@ -110,6 +209,21 @@ body {
   to { opacity: 1; }
 }
 
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-out-right {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
 .animate-pulse-glow {
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
@@ -119,24 +233,40 @@ body {
 }
 
 .animate-slide-up {
-  animation: slide-up 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+  animation: slide-up var(--transition-snap);
 }
 
 .animate-fade-in {
-  animation: fade-in 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+  animation: fade-in var(--transition-snap);
 }
 
-/* ---- Plotly overrides for gruvbox ---- */
+.animate-slide-in-right {
+  animation: slide-in-right 0.2s cubic-bezier(0.15, 0.9, 0.25, 1);
+}
+
+.animate-slide-out-right {
+  animation: slide-out-right 0.15s cubic-bezier(0.15, 0.9, 0.25, 1) forwards;
+}
+
+/* ---- Skeleton loader ---- */
+.skeleton {
+  background: linear-gradient(90deg, var(--c-bg1) 25%, var(--c-bg2) 50%, var(--c-bg1) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Plotly overrides ---- */
 .js-plotly-plot .plotly .modebar {
   background: transparent !important;
 }
 
 .js-plotly-plot .plotly .modebar-btn path {
-  fill: var(--color-fg-muted) !important;
+  fill: var(--c-fg-muted) !important;
 }
 
 .js-plotly-plot .plotly .modebar-btn:hover path {
-  fill: var(--color-fg) !important;
+  fill: var(--c-fg) !important;
 }
 
 /* ---- CodeMirror height ---- */
@@ -146,4 +276,10 @@ body {
 
 .cm-editor .cm-scroller {
   overflow: auto;
+}
+
+/* ---- Utility: no-select ---- */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
 }

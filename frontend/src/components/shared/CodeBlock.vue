@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, shallowRef, onUnmounted } from 'vue'
+import { useTheme } from '../../composables/useTheme'
 
 const props = withDefaults(defineProps<{
   code: string
@@ -12,6 +13,7 @@ const emit = defineEmits<{
   'update:code': [code: string]
 }>()
 
+const { theme } = useTheme()
 const container = ref<HTMLDivElement | null>(null)
 const editorView = shallowRef<import('@codemirror/view').EditorView | null>(null)
 let loaded = false
@@ -21,7 +23,7 @@ async function initEditor() {
   loaded = true
 
   const [
-    { EditorView, lineNumbers, keymap },
+    { EditorView, lineNumbers },
     { EditorState },
     { python },
     { oneDark },
@@ -34,27 +36,27 @@ async function initEditor() {
 
   const gruvboxTheme = EditorView.theme({
     '&': {
-      backgroundColor: '#1d2021',
-      color: '#ebdbb2',
-      fontSize: '13px',
+      backgroundColor: 'var(--c-cm-bg)',
+      color: 'var(--c-fg)',
+      fontSize: '0.8125rem',
       fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
-      backgroundColor: '#1d2021',
-      color: '#665c54',
+      backgroundColor: 'var(--c-cm-gutter)',
+      color: 'var(--c-cm-gutter-fg)',
       border: 'none',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: '#282828',
+      backgroundColor: 'var(--c-cm-active-line)',
     },
     '.cm-activeLine': {
-      backgroundColor: '#28282860',
+      backgroundColor: 'var(--c-cm-active-line)',
     },
     '&.cm-focused .cm-cursor': {
-      borderLeftColor: '#83a598',
+      borderLeftColor: 'var(--c-cm-cursor)',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: '#3c383660',
+      backgroundColor: 'var(--c-cm-selection)',
     },
     '.cm-line': {
       padding: '0 4px',
@@ -112,7 +114,15 @@ onUnmounted(() => {
 <template>
   <div
     ref="container"
-    class="overflow-hidden"
-    style="min-height: 48px; background: var(--color-bg-hard); border-radius: 2px"
+    class="code-block"
   />
 </template>
+
+<style scoped>
+.code-block {
+  overflow: hidden;
+  min-height: 3rem;
+  background: var(--c-cm-bg);
+  border-radius: var(--radius-sm);
+}
+</style>

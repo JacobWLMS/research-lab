@@ -100,57 +100,49 @@ function openCanvasReport() {
 
 <template>
   <div
-    class="border overflow-hidden"
-    :style="{
-      background: 'var(--color-bg)',
-      borderColor: isRunning ? 'var(--color-yellow)' : 'var(--color-bg2)',
-      borderRadius: '2px',
-      transition: 'border-color 0.12s cubic-bezier(0.15, 0.9, 0.25, 1)',
+    class="step-card"
+    :class="{
+      'step-card--running': isRunning,
+      'step-card--completed': step.status === 'completed',
+      'step-card--failed': step.status === 'failed',
     }"
   >
     <!-- Step header bar -->
-    <div
-      class="flex items-center justify-between px-3 py-1.5 border-b"
-      style="border-color: var(--color-bg2)"
-    >
+    <div class="step-card__header">
       <!-- Left: status, name, duration -->
-      <div class="flex items-center gap-2">
+      <div class="step-card__header-left">
         <StatusBadge :status="step.status" />
-        <span v-if="result" class="text-xs font-mono" style="color: var(--color-fg-dim)">
-          {{ fmtDur(result.execution_time_s) }}
-        </span>
-        <span v-if="isRunning" class="text-xs font-medium" style="color: var(--color-yellow)">
-          Running...
-        </span>
+        <span v-if="result" class="step-card__duration">{{ fmtDur(result.execution_time_s) }}</span>
+        <span v-if="isRunning" class="step-card__running-label">Running...</span>
       </div>
 
       <!-- Right: disclosures + actions -->
-      <div class="flex items-center gap-1">
+      <div class="step-card__header-right">
         <button
-          class="text-xs px-2 py-0.5 cursor-pointer"
-          :style="{
-            background: showCode ? 'var(--color-bg2)' : 'transparent',
-            color: 'var(--color-fg-muted)',
-            borderRadius: '2px',
-            transition: 'all 0.12s',
-          }"
+          class="step-card__toggle"
+          :class="{ 'step-card__toggle--active': showCode }"
           @click="showCode = !showCode"
-        >{{ showCode ? '\u25BC' : '\u25B6' }} Code</button>
+        >
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+            <path :d="showCode ? 'M7 10l5 5 5-5z' : 'M10 17l5-5-5-5z'"/>
+          </svg>
+          Code
+        </button>
         <button
-          class="text-xs px-2 py-0.5 cursor-pointer"
-          :style="{
-            background: showLogs ? 'var(--color-bg2)' : 'transparent',
-            color: 'var(--color-fg-muted)',
-            borderRadius: '2px',
-            transition: 'all 0.12s',
-          }"
+          class="step-card__toggle"
+          :class="{ 'step-card__toggle--active': showLogs }"
           @click="showLogs = !showLogs"
-        >{{ showLogs ? '\u25BC' : '\u25B6' }} Logs</button>
+        >
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+            <path :d="showLogs ? 'M7 10l5 5 5-5z' : 'M10 17l5-5-5-5z'"/>
+          </svg>
+          Logs
+        </button>
       </div>
     </div>
 
     <!-- Code block (collapsible) -->
-    <div v-if="showCode" class="border-b" style="border-color: var(--color-bg2)">
+    <div v-if="showCode" class="step-card__code animate-slide-up">
       <CodeBlock
         :code="step.code"
         :editable="!isRunning"
@@ -159,30 +151,24 @@ function openCanvasReport() {
     </div>
 
     <!-- Step body -->
-    <div class="p-3">
+    <div class="step-card__body">
       <!-- Metrics summary chips -->
-      <div
-        v-if="Object.keys(summaryMetrics).length > 0"
-        class="mb-2"
-      >
+      <div v-if="Object.keys(summaryMetrics).length > 0" class="step-card__metrics">
         <MetricStrip :data="summaryMetrics" />
       </div>
 
       <!-- Progress bar -->
-      <div v-if="progress && progress.total > 0" class="mb-2">
-        <div class="flex items-center justify-between mb-0.5">
-          <span class="text-xs font-mono" style="color: var(--color-fg-muted)">
-            {{ progress.current }}/{{ progress.total }}
-          </span>
-          <span class="text-xs" style="color: var(--color-fg-dim)">{{ fmtEta(progress.eta_s) }}</span>
+      <div v-if="progress && progress.total > 0" class="step-card__progress">
+        <div class="step-card__progress-info">
+          <span class="step-card__progress-count">{{ progress.current }}/{{ progress.total }}</span>
+          <span class="step-card__progress-eta">{{ fmtEta(progress.eta_s) }}</span>
         </div>
-        <div class="h-1 w-full overflow-hidden" style="background: var(--color-bg2); border-radius: 2px">
+        <div class="step-card__progress-bar">
           <div
-            class="h-full"
+            class="step-card__progress-fill"
             :style="{
               width: progressPct + '%',
-              background: step.status === 'failed' ? 'var(--color-red)' : 'var(--color-aqua)',
-              transition: 'width 0.3s ease-out',
+              background: step.status === 'failed' ? 'var(--c-red)' : 'var(--c-aqua)',
             }"
           />
         </div>
@@ -194,32 +180,26 @@ function openCanvasReport() {
       </div>
 
       <!-- Empty state: not executed -->
-      <div
-        v-else
-        class="flex flex-col items-center justify-center py-6 gap-1"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--color-fg-dim)">
+      <div v-else class="step-card__empty">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--c-fg-dim)">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        <span class="text-xs" style="color: var(--color-fg-dim)">Not yet executed</span>
+        <span>Not yet executed</span>
       </div>
 
       <!-- Action row -->
-      <div class="mt-3 flex items-center gap-2">
+      <div class="step-card__actions">
         <!-- Stop button (running) -->
-        <button
-          v-if="isRunning"
-          class="flex items-center gap-1 px-3 py-1 text-xs font-medium cursor-pointer"
-          style="background: var(--color-red); color: var(--color-bg-hard); border-radius: 2px"
-          @click="emit('stop')"
-        >Stop</button>
+        <button v-if="isRunning" class="step-card__stop-btn" @click="emit('stop')">Stop</button>
         <svg
           v-if="isRunning"
-          class="animate-spin h-3.5 w-3.5"
+          class="animate-spin"
+          width="14"
+          height="14"
           viewBox="0 0 24 24"
           fill="none"
-          style="color: var(--color-yellow)"
+          style="color: var(--c-yellow)"
         >
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.25"/>
           <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -228,22 +208,20 @@ function openCanvasReport() {
         <!-- Run button (not running) -->
         <button
           v-if="!isRunning"
-          class="flex items-center gap-1 px-3 py-1 text-xs font-medium cursor-pointer"
-          style="background: var(--color-bg2); color: var(--color-fg); border-radius: 2px; transition: background 0.12s"
+          class="step-card__run-btn"
+          title="Run this step (Ctrl+Enter)"
           @click="emit('run')"
-          @mouseenter="($event.currentTarget as HTMLElement).style.background = 'var(--color-bg3)'"
-          @mouseleave="($event.currentTarget as HTMLElement).style.background = 'var(--color-bg2)'"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           Run Step
         </button>
 
-        <div class="flex-1" />
+        <div style="flex: 1" />
 
         <!-- View Report button -->
         <button
           v-if="hasCanvases"
-          class="step-canvas__report-btn flex items-center gap-1.5 px-3 py-1 text-xs font-medium cursor-pointer"
+          class="step-card__report-btn"
           @click="openCanvasReport"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -251,70 +229,297 @@ function openCanvasReport() {
             <path d="M3 9h18M9 21V9" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           View Report
-          <span class="step-canvas__widget-count">{{ canvasWidgetCount }}</span>
+          <span class="step-card__widget-count">{{ canvasWidgetCount }}</span>
         </button>
         <span
           v-else-if="step.status === 'completed' || step.status === 'failed'"
-          class="text-xs"
-          style="color: var(--color-fg-dim)"
+          class="step-card__no-report"
         >No report</span>
       </div>
     </div>
 
-    <!-- ========== LOGS PANEL (collapsible) ========== -->
-    <div v-if="showLogs" class="border-t" style="border-color: var(--color-bg2)">
-      <div class="p-3">
-        <template v-if="result">
-          <div class="text-xs font-medium mb-1" style="color: var(--color-fg-muted)">Full Output</div>
-          <StreamingOutput :lines="result.stdout ? result.stdout.split('\n') : []" />
-          <div v-if="result.stderr" class="mt-2">
-            <div class="text-xs font-medium mb-1" style="color: var(--color-red)">Stderr</div>
-            <StreamingOutput :lines="result.stderr.split('\n')" />
-          </div>
-          <div
-            v-if="result.error"
-            class="mt-2 p-2 text-xs font-mono"
-            style="background: var(--color-bg1); color: var(--color-red); border-radius: 2px"
-          >{{ result.error }}</div>
-        </template>
-        <div
-          v-else
-          class="flex items-center justify-center py-3 text-xs"
-          style="color: var(--color-fg-dim)"
-        >No logs available</div>
-      </div>
+    <!-- Logs panel (collapsible) -->
+    <div v-if="showLogs" class="step-card__logs animate-slide-up">
+      <template v-if="result">
+        <div class="step-card__logs-label">Full Output</div>
+        <StreamingOutput :lines="result.stdout ? result.stdout.split('\n') : []" />
+        <div v-if="result.stderr" class="step-card__logs-section">
+          <div class="step-card__logs-label step-card__logs-label--error">Stderr</div>
+          <StreamingOutput :lines="result.stderr.split('\n')" />
+        </div>
+        <div v-if="result.error" class="step-card__error-box">{{ result.error }}</div>
+      </template>
+      <div v-else class="step-card__logs-empty">No logs available</div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.step-canvas__report-btn {
-  background: var(--color-aqua);
-  color: var(--color-bg-hard);
-  border: none;
-  border-radius: 2px;
-  transition: all 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+.step-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-surface);
+  overflow: hidden;
+  transition: border-color 0.15s;
 }
 
-.step-canvas__report-btn:hover {
+.step-card--running {
+  border-color: var(--c-yellow);
+}
+
+.step-card--completed {
+  border-color: var(--c-border);
+}
+
+.step-card--failed {
+  border-color: var(--c-red);
+}
+
+/* Header */
+.step-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid var(--c-border-subtle);
+}
+
+.step-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-card__header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.step-card__duration {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--c-fg-dim);
+}
+
+.step-card__running-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-yellow);
+}
+
+/* Toggle buttons */
+.step-card__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  color: var(--c-fg-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.step-card__toggle:hover {
+  background: var(--c-surface-hover);
+}
+
+.step-card__toggle--active {
+  background: var(--c-surface-active);
+  color: var(--c-fg);
+}
+
+/* Code section */
+.step-card__code {
+  border-bottom: 1px solid var(--c-border-subtle);
+}
+
+/* Body */
+.step-card__body {
+  padding: 0.75rem;
+}
+
+.step-card__metrics {
+  margin-bottom: 0.5rem;
+}
+
+/* Progress */
+.step-card__progress {
+  margin-bottom: 0.5rem;
+}
+
+.step-card__progress-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.step-card__progress-count {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--c-fg-muted);
+}
+
+.step-card__progress-eta {
+  font-size: 0.75rem;
+  color: var(--c-fg-dim);
+}
+
+.step-card__progress-bar {
+  height: 0.25rem;
+  width: 100%;
+  background: var(--c-bg2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.step-card__progress-fill {
+  height: 100%;
+  transition: width 0.3s ease-out;
+  border-radius: var(--radius-sm);
+}
+
+/* Empty state */
+.step-card__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 0;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--c-fg-dim);
+}
+
+/* Actions */
+.step-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.step-card__stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--c-red);
+  color: var(--c-bg-hard);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.step-card__stop-btn:hover {
   filter: brightness(1.1);
 }
 
-.step-canvas__report-btn:active {
+.step-card__run-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--c-bg2);
+  color: var(--c-fg);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.step-card__run-btn:hover {
+  background: var(--c-bg3);
+}
+
+.step-card__report-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--c-aqua);
+  color: var(--c-bg-hard);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.step-card__report-btn:hover {
+  filter: brightness(1.1);
+}
+
+.step-card__report-btn:active {
   filter: brightness(0.95);
 }
 
-.step-canvas__widget-count {
+.step-card__widget-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  font-size: 10px;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  font-size: 0.625rem;
   font-weight: 600;
   font-family: var(--font-mono);
-  background: rgba(29, 32, 33, 0.25);
-  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.step-card__no-report {
+  font-size: 0.75rem;
+  color: var(--c-fg-dim);
+}
+
+/* Logs panel */
+.step-card__logs {
+  border-top: 1px solid var(--c-border-subtle);
+  padding: 0.75rem;
+}
+
+.step-card__logs-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-fg-muted);
+  margin-bottom: 0.25rem;
+}
+
+.step-card__logs-label--error {
+  color: var(--c-red);
+}
+
+.step-card__logs-section {
+  margin-top: 0.5rem;
+}
+
+.step-card__error-box {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  background: var(--c-bg1);
+  color: var(--c-red);
+  border-radius: var(--radius-sm);
+}
+
+.step-card__logs-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--c-fg-dim);
 }
 </style>

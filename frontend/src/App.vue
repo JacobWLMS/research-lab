@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from './components/layout/AppShell.vue'
+import ToastContainer from './components/shared/ToastContainer.vue'
 
 const route = useRoute()
 const isFullscreen = computed(() => (route.meta as Record<string, unknown>).fullscreen === true)
@@ -13,4 +14,5 @@ const isFullscreen = computed(() => (route.meta as Record<string, unknown>).full
   <AppShell v-else>
     <router-view />
   </AppShell>
+  <ToastContainer />
 </template>

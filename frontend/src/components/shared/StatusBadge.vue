@@ -11,25 +11,49 @@ const props = withDefaults(defineProps<{
 
 const color = computed(() => {
   switch (props.status) {
-    case 'completed': return 'var(--color-green)'
-    case 'running': return 'var(--color-yellow)'
-    case 'failed': return 'var(--color-red)'
-    default: return 'var(--color-fg-dim)'
+    case 'completed': return 'var(--c-green)'
+    case 'running': return 'var(--c-yellow)'
+    case 'failed': return 'var(--c-red)'
+    default: return 'var(--c-fg-dim)'
   }
 })
 </script>
 
 <template>
-  <span class="inline-flex items-center gap-1.5 shrink-0">
+  <span class="status-badge">
     <span
-      class="inline-block w-2 h-2 rounded-full shrink-0"
+      class="status-badge__dot"
       :class="{ 'animate-pulse-glow': status === 'running' }"
       :style="{ background: color }"
     />
     <span
       v-if="showLabel"
-      class="text-xs capitalize"
+      class="status-badge__label"
       :style="{ color }"
     >{{ status }}</span>
   </span>
 </template>
+
+<style scoped>
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.status-badge__dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.status-badge__label {
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  transition: color 0.2s;
+}
+</style>

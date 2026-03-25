@@ -120,18 +120,11 @@ watch([experimentId, stepName], () => {
 </script>
 
 <template>
-  <div
-    class="canvas-report"
-    :class="{ 'canvas-report--ready': ready }"
-  >
+  <div class="canvas-report" :class="{ 'canvas-report--ready': ready }">
     <!-- Slim header -->
     <header class="canvas-report__header">
       <div class="canvas-report__header-left">
-        <button
-          class="canvas-report__back"
-          @click="goBack"
-          title="Back to experiment (Esc)"
-        >
+        <button class="canvas-report__back" @click="goBack" title="Back to experiment (Esc)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -160,8 +153,8 @@ watch([experimentId, stepName], () => {
     </header>
 
     <!-- Loading state -->
-    <div v-if="loading" class="canvas-report__loading">
-      <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <div v-if="loading" class="canvas-report__state">
+      <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" style="color: var(--c-fg-dim)">
         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.25"/>
         <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
@@ -169,14 +162,14 @@ watch([experimentId, stepName], () => {
     </div>
 
     <!-- Error state -->
-    <div v-else-if="error" class="canvas-report__error">
+    <div v-else-if="error" class="canvas-report__state canvas-report__state--error">
       <span>Failed to load: {{ error }}</span>
       <button class="canvas-report__retry" @click="fetchStepData">Retry</button>
     </div>
 
     <!-- No canvases -->
-    <div v-else-if="canvases.length === 0" class="canvas-report__empty">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--color-fg-dim)">
+    <div v-else-if="canvases.length === 0" class="canvas-report__state">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--c-fg-dim)">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
         <path d="M3 9h18M9 21V9" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -208,10 +201,7 @@ watch([experimentId, stepName], () => {
           <template v-for="(widget, idx) in activeCanvas.widgets" :key="idx">
             <!-- Chart widget -->
             <div v-if="isChart(widget)" class="canvas-report__widget canvas-report__widget--chart">
-              <PlotlyChart
-                :plotly-json="widget.plotly_json"
-                :title="widget.title"
-              />
+              <PlotlyChart :plotly-json="widget.plotly_json" :title="widget.title" />
             </div>
 
             <!-- Metrics widget -->
@@ -221,11 +211,7 @@ watch([experimentId, stepName], () => {
 
             <!-- Image widget -->
             <div v-else-if="isImage(widget)" class="canvas-report__widget canvas-report__widget--image">
-              <ImageWidget
-                :title="widget.title"
-                :mime="widget.mime"
-                :data="widget.data"
-              />
+              <ImageWidget :title="widget.title" :mime="widget.mime" :data="widget.data" />
             </div>
 
             <!-- Text widget -->
@@ -235,10 +221,7 @@ watch([experimentId, stepName], () => {
           </template>
 
           <!-- Empty canvas -->
-          <div
-            v-if="activeCanvas.widgets.length === 0"
-            class="canvas-report__widget-empty"
-          >
+          <div v-if="activeCanvas.widgets.length === 0" class="canvas-report__widget-empty">
             This canvas has no widgets yet
           </div>
         </div>
@@ -254,8 +237,8 @@ watch([experimentId, stepName], () => {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-hard);
-  color: var(--color-fg);
+  background: var(--c-bg-hard);
+  color: var(--c-fg);
   opacity: 0;
   transition: opacity 0.2s cubic-bezier(0.15, 0.9, 0.25, 1);
 }
@@ -269,17 +252,17 @@ watch([experimentId, stepName], () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 44px;
-  padding: 0 16px;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-bg2);
+  height: 2.75rem;
+  padding: 0 1rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }
 
 .canvas-report__header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.625rem;
 }
 
 .canvas-report__header-right {
@@ -290,100 +273,93 @@ watch([experimentId, stepName], () => {
 .canvas-report__back {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  font-size: 12px;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  color: var(--color-fg-muted);
-  background: var(--color-bg1);
+  color: var(--c-fg-muted);
+  background: var(--c-bg1);
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+  transition: background 0.12s, color 0.12s;
 }
 
 .canvas-report__back:hover {
-  background: var(--color-bg2);
-  color: var(--color-fg);
-}
-
-.canvas-report__back:focus-visible {
-  outline: 1px solid var(--color-aqua);
-  outline-offset: 1px;
+  background: var(--c-surface-active);
+  color: var(--c-fg);
 }
 
 .canvas-report__divider {
   width: 1px;
-  height: 16px;
-  background: var(--color-bg3);
+  height: 1rem;
+  background: var(--c-bg3);
 }
 
 .canvas-report__step-label {
-  font-size: 12px;
-  color: var(--color-fg-dim);
+  font-size: 0.75rem;
+  color: var(--c-fg-dim);
 }
 
 .canvas-report__step-name {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   font-family: var(--font-mono);
-  color: var(--color-fg);
+  color: var(--c-fg);
 }
 
 .canvas-report__duration {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-family: var(--font-mono);
-  color: var(--color-fg-muted);
+  color: var(--c-fg-muted);
 }
 
 .canvas-report__hint {
-  font-size: 11px;
-  color: var(--color-fg-dim);
-  padding: 2px 8px;
-  background: var(--color-bg1);
-  border-radius: 2px;
+  font-size: 0.6875rem;
+  color: var(--c-fg-dim);
+  padding: 0.125rem 0.5rem;
+  background: var(--c-bg1);
+  border-radius: var(--radius-sm);
 }
 
 /* ---- Tabs ---- */
 .canvas-report__tabs {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 0 24px;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-bg2);
+  padding: 0 1.5rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }
 
 .canvas-report__tab {
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--color-fg-muted);
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--c-fg-muted);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+  transition: color 0.12s, border-color 0.12s;
 }
 
 .canvas-report__tab:hover {
-  color: var(--color-fg);
+  color: var(--c-fg);
 }
 
 .canvas-report__tab--active {
-  color: var(--color-fg);
+  color: var(--c-fg);
   font-weight: 500;
-  border-bottom-color: var(--color-aqua);
+  border-bottom-color: var(--c-aqua);
 }
 
 .canvas-report__canvas-label {
-  padding: 6px 24px;
-  font-size: 12px;
+  padding: 0.375rem 1.5rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  color: var(--color-fg-muted);
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-bg2);
+  color: var(--c-fg-muted);
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -393,129 +369,100 @@ watch([experimentId, stepName], () => {
 .canvas-report__body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 1.5rem;
 }
 
 .canvas-report__widgets {
-  max-width: 1200px;
+  max-width: 75rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 1.25rem;
 }
 
 /* ---- Widget variants ---- */
 .canvas-report__widget {
   width: 100%;
+  animation: slide-up 0.15s ease both;
 }
 
 .canvas-report__widget--chart {
-  min-height: 500px;
+  min-height: 31.25rem;
 }
 
 .canvas-report__widget--chart :deep(.w-full) {
-  min-height: 500px;
-  height: 560px;
+  min-height: 31.25rem;
+  height: 35rem;
 }
 
-.canvas-report__widget--metrics :deep(.flex) {
-  gap: 10px;
-}
-
-.canvas-report__widget--metrics :deep(.flex > div) {
-  padding: 10px 16px;
-}
-
-.canvas-report__widget--metrics :deep(.text-xs) {
-  font-size: 13px;
-}
-
-.canvas-report__widget--metrics :deep(.text-sm) {
-  font-size: 18px;
+.canvas-report__widget--metrics :deep(.metric-strip) {
+  gap: 0.625rem;
 }
 
 .canvas-report__widget--text :deep(div) {
-  padding: 16px 20px;
-  font-size: 15px;
+  padding: 1rem 1.25rem;
+  font-size: 0.9375rem;
   line-height: 1.7;
 }
 
 .canvas-report__widget--image :deep(img) {
   max-width: 100%;
-  max-height: 700px;
+  max-height: 43.75rem;
 }
 
 .canvas-report__widget-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 48px;
-  font-size: 14px;
-  color: var(--color-fg-dim);
+  padding: 3rem;
+  font-size: 0.875rem;
+  color: var(--c-fg-dim);
 }
 
 /* ---- States ---- */
-.canvas-report__loading {
+.canvas-report__state {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  font-size: 14px;
-  color: var(--color-fg-dim);
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--c-fg-dim);
 }
 
-.canvas-report__error {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  font-size: 14px;
-  color: var(--color-red);
+.canvas-report__state--error {
+  color: var(--c-red);
 }
 
 .canvas-report__retry {
-  padding: 6px 16px;
-  font-size: 12px;
+  padding: 0.375rem 1rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  color: var(--color-fg);
-  background: var(--color-bg2);
+  color: var(--c-fg);
+  background: var(--c-bg2);
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s;
 }
 
 .canvas-report__retry:hover {
-  background: var(--color-bg3);
-}
-
-.canvas-report__empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  font-size: 14px;
-  color: var(--color-fg-dim);
+  background: var(--c-bg3);
 }
 
 .canvas-report__back-link {
-  padding: 4px 12px;
-  font-size: 12px;
-  color: var(--color-aqua);
-  background: var(--color-bg1);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--c-aqua);
+  background: var(--c-bg1);
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s;
 }
 
 .canvas-report__back-link:hover {
-  background: var(--color-bg2);
+  background: var(--c-surface-hover);
 }
 </style>

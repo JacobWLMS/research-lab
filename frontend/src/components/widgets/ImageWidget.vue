@@ -13,33 +13,65 @@ const src = computed(() => `data:${props.mime};base64,${props.data}`)
 
 <template>
   <div>
-    <div v-if="title" class="text-xs font-medium mb-1" style="color: var(--color-fg-muted)">
-      {{ title }}
-    </div>
+    <div v-if="title" class="image-widget__title">{{ title }}</div>
     <img
       :src="src"
       :alt="title ?? 'Image output'"
-      class="max-w-full cursor-pointer"
-      style="border: 1px solid var(--color-bg2); border-radius: 2px; transition: opacity 0.12s"
+      class="image-widget__img"
       @click="showOverlay = true"
-      @mouseenter="($event.currentTarget as HTMLElement).style.opacity = '0.85'"
-      @mouseleave="($event.currentTarget as HTMLElement).style.opacity = '1'"
     />
     <!-- Lightbox overlay -->
     <Teleport to="body">
       <div
         v-if="showOverlay"
-        class="fixed inset-0 flex items-center justify-center z-50 cursor-pointer animate-fade-in"
-        style="background: rgba(29, 32, 33, 0.92)"
+        class="image-widget__overlay animate-fade-in"
         @click="showOverlay = false"
       >
         <img
           :src="src"
           :alt="title ?? 'Image output'"
-          class="max-w-[90vw] max-h-[90vh]"
-          style="border: 1px solid var(--color-bg2); border-radius: 2px"
+          class="image-widget__overlay-img"
         />
       </div>
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.image-widget__title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-fg-muted);
+  margin-bottom: 0.25rem;
+}
+
+.image-widget__img {
+  max-width: 100%;
+  cursor: pointer;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  transition: opacity 0.12s;
+}
+
+.image-widget__img:hover {
+  opacity: 0.85;
+}
+
+.image-widget__overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  background: var(--c-overlay);
+  cursor: pointer;
+}
+
+.image-widget__overlay-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+}
+</style>
