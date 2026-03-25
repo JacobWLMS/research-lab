@@ -80,9 +80,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(compute_router)
     app.include_router(ws_router)
 
-    # Mount frontend static files if the dist directory exists
-    frontend_dist = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
-    if frontend_dist.is_dir():
-        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+    # Mount frontend static files — check multiple locations
+    import os
+    frontend_candidates = [
+        os.environ.get("RESEARCHLAB_STATIC_DIR", ""),
+        str(Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"),
+        str(Path(settings.project_dir) / "research-lab-frontend"),
+        "/root/research-lab-frontend",
+    ]
+    for candidate in frontend_candidates:
+        if candidate and Path(candidate).is_dir() and (Path(candidate) / "index.html").exists():
+            app.mount("/", StaticFiles(directory=candidate, html=True), name="frontend")
+            logger.info("Serving frontend from %s", candidate)
+            break
 
     return app
