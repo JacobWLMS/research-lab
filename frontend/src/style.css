@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+@theme {
+  /* Gruvbox Hard Dark Backgrounds */
+  --color-bg-hard: #1d2021;
+  --color-bg: #282828;
+  --color-bg1: #3c3836;
+  --color-bg2: #504945;
+  --color-bg3: #665c54;
+
+  /* Gruvbox Foreground / Text */
+  --color-fg: #ebdbb2;
+  --color-fg2: #d5c4a1;
+  --color-fg-muted: #a89984;
+  --color-fg-dim: #928374;
+
+  /* Gruvbox Accent Colors */
+  --color-aqua: #83a598;
+  --color-green: #b8bb26;
+  --color-yellow: #fabd2f;
+  --color-red: #fb4934;
+  --color-orange: #fe8019;
+  --color-purple: #d3869b;
+  --color-blue: #458588;
+
+  /* Design tokens */
+  --radius-sm: 2px;
+  --transition-snap: 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+
+  /* Font stacks */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ---- Base resets ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg-hard);
+  color: var(--color-fg);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg2);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-bg3);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg2) transparent;
+}
+
+/* ---- Selection ---- */
+::selection {
+  background: var(--color-aqua);
+  color: var(--color-bg-hard);
+}
+
+/* ---- Focus ---- */
+:focus-visible {
+  outline: 1px solid var(--color-aqua);
+  outline-offset: 1px;
+}
+
+/* ---- Animations ---- */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 0.12s cubic-bezier(0.15, 0.9, 0.25, 1);
+}
+
+/* ---- Plotly overrides for gruvbox ---- */
+.js-plotly-plot .plotly .modebar {
+  background: transparent !important;
+}
+
+.js-plotly-plot .plotly .modebar-btn path {
+  fill: var(--color-fg-muted) !important;
+}
+
+.js-plotly-plot .plotly .modebar-btn:hover path {
+  fill: var(--color-fg) !important;
+}
+
+/* ---- CodeMirror height ---- */
+.cm-editor {
+  height: 100%;
+}
+
+.cm-editor .cm-scroller {
+  overflow: auto;
+}
