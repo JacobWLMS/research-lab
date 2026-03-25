@@ -7,7 +7,9 @@ import { useExperiments } from '../../composables/useExperiments'
 import { useTheme } from '../../composables/useTheme'
 import { useZoom, type ZoomLevel } from '../../composables/useZoom'
 import { useToast } from '../../composables/useToast'
+import { useToolbarContext } from '../../composables/useToolbarContext'
 import ExperimentList from '../experiment/ExperimentList.vue'
+import StatusBadge from '../shared/StatusBadge.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -17,6 +19,14 @@ const { fetchExperiments } = useExperiments()
 const { theme, toggleTheme } = useTheme()
 const { zoom, zoomLevels, setZoom } = useZoom()
 const toast = useToast()
+const {
+  experimentName,
+  experimentStatus,
+  pipelineRunning: toolbarPipelineRunning,
+  runAllDisabled: toolbarRunAllDisabled,
+  triggerRunPipeline,
+  triggerAddStep,
+} = useToolbarContext()
 
 // Panel state
 const PANEL_STORAGE_KEY = 'research-lab-panel-width'
@@ -154,7 +164,7 @@ onUnmounted(() => {
   <div class="app-shell">
     <!-- ====== Top Toolbar ====== -->
     <header class="app-shell__toolbar">
-      <!-- Left group: collapse toggle + logo -->
+      <!-- Left group: collapse toggle + logo + experiment breadcrumb -->
       <div class="app-shell__toolbar-left">
         <button
           class="app-shell__icon-btn"
@@ -171,6 +181,12 @@ onUnmounted(() => {
           </svg>
           <span class="app-shell__title">research-lab</span>
         </div>
+        <!-- Experiment breadcrumb (shown when an experiment is active) -->
+        <template v-if="experimentName">
+          <span class="app-shell__breadcrumb-sep">/</span>
+          <span class="app-shell__breadcrumb-name">{{ experimentName }}</span>
+          <StatusBadge :status="experimentStatus" :show-label="false" />
+        </template>
       </div>
 
       <!-- Center group: GPU stats -->
@@ -186,8 +202,37 @@ onUnmounted(() => {
         </template>
       </div>
 
-      <!-- Right group: actions + status -->
+      <!-- Right group: experiment actions + global controls + status -->
       <div class="app-shell__toolbar-right">
+        <!-- Experiment actions (shown when an experiment is active) -->
+        <template v-if="experimentName">
+          <!-- Run Pipeline -->
+          <button
+            class="app-shell__action-btn app-shell__action-btn--primary"
+            :class="{ 'app-shell__action-btn--disabled': toolbarRunAllDisabled }"
+            :disabled="toolbarRunAllDisabled"
+            title="Run full pipeline (Ctrl+Shift+Enter)"
+            @click="triggerRunPipeline"
+          >
+            <svg v-if="toolbarPipelineRunning" class="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5" opacity="0.3"/>
+              <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            {{ toolbarPipelineRunning ? 'Running...' : 'Run Pipeline' }}
+          </button>
+
+          <!-- Add Step -->
+          <button class="app-shell__action-btn" @click="triggerAddStep">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14m-7-7h14" stroke-linecap="round"/>
+            </svg>
+            Add Step
+          </button>
+
+          <span class="app-shell__toolbar-divider" />
+        </template>
+
         <!-- Refresh -->
         <button
           class="app-shell__icon-btn"
@@ -310,7 +355,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .app-shell__toolbar-center {
@@ -341,6 +388,75 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--c-aqua);
+}
+
+/* Experiment breadcrumb in toolbar */
+.app-shell__breadcrumb-sep {
+  color: var(--c-fg-dim);
+  font-size: 0.75rem;
+  margin: 0 0.125rem;
+  user-select: none;
+}
+
+.app-shell__breadcrumb-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--c-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 14rem;
+}
+
+/* Toolbar action buttons (Run Pipeline, Add Step) */
+.app-shell__action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--c-fg-muted);
+  background: var(--c-bg1);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  height: 1.625rem;
+}
+
+.app-shell__action-btn:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-fg);
+}
+
+.app-shell__action-btn--primary {
+  background: var(--c-aqua);
+  color: var(--c-bg-hard);
+}
+
+.app-shell__action-btn--primary:hover {
+  filter: brightness(1.1);
+}
+
+.app-shell__action-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-shell__action-btn--disabled:hover {
+  filter: none;
+}
+
+/* Divider between experiment actions and global controls */
+.app-shell__toolbar-divider {
+  display: block;
+  width: 1px;
+  height: 1rem;
+  background: var(--c-border);
+  margin: 0 0.125rem;
+  flex-shrink: 0;
 }
 
 /* Icon button */

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExperimentDetail } from '../../composables/useExperimentDetail'
+import { useToolbarContext } from '../../composables/useToolbarContext'
 import PipelineBar from './PipelineBar.vue'
 import StepCanvas from './StepCanvas.vue'
-import StatusBadge from '../shared/StatusBadge.vue'
 import TerminalPanel from '../shared/TerminalPanel.vue'
 
 const props = defineProps<{
@@ -67,6 +67,32 @@ const overallStatus = computed(() => {
 })
 
 const runAllDisabled = computed(() => anyStepRunning.value || pipelineRunning.value)
+
+// Push experiment context to the shared toolbar store
+const toolbarCtx = useToolbarContext()
+
+watch(
+  [experiment, overallStatus, pipelineRunning, runAllDisabled],
+  () => {
+    if (experiment.value) {
+      toolbarCtx.setContext({
+        name: experiment.value.name,
+        status: overallStatus.value,
+        pipelineRunning: pipelineRunning.value,
+        runAllDisabled: runAllDisabled.value,
+        onRunPipeline: () => { if (!runAllDisabled.value) runPipeline() },
+        onAddStep: openAddStep,
+      })
+    } else {
+      toolbarCtx.clearContext()
+    }
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  toolbarCtx.clearContext()
+})
 
 function onTerminalResizeStart(e: MouseEvent) {
   isResizingTerminal.value = true
@@ -149,55 +175,6 @@ onUnmounted(() => {
 
   <!-- Experiment detail -->
   <div v-else-if="experiment" class="detail">
-    <!-- Header row -->
-    <div class="detail__header">
-      <div class="detail__header-left">
-        <StatusBadge :status="overallStatus" />
-        <h1 class="detail__title">{{ experiment.name }}</h1>
-        <span class="detail__id">{{ experiment.id }}</span>
-      </div>
-
-      <div class="detail__header-actions">
-        <!-- Run Pipeline -->
-        <button
-          class="detail__action-btn detail__action-btn--primary"
-          :class="{ 'detail__action-btn--disabled': runAllDisabled }"
-          :disabled="runAllDisabled"
-          title="Run full pipeline (Ctrl+Shift+Enter)"
-          @click="!runAllDisabled && runPipeline()"
-        >
-          <svg v-if="pipelineRunning" class="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5" opacity="0.3"/>
-            <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          {{ pipelineRunning ? 'Running...' : 'Run Pipeline' }}
-        </button>
-
-        <!-- Add Step -->
-        <button class="detail__action-btn" @click="openAddStep">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14m-7-7h14" stroke-linecap="round"/>
-          </svg>
-          Add Step
-        </button>
-
-        <!-- Terminal toggle -->
-        <button
-          class="detail__action-btn"
-          :class="{ 'detail__action-btn--active': terminalOpen }"
-          title="Toggle terminal (Ctrl+`)"
-          @click="terminalOpen = !terminalOpen"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="4 17 10 11 4 5"/>
-            <line x1="12" y1="19" x2="20" y2="19"/>
-          </svg>
-          Terminal
-        </button>
-      </div>
-    </div>
-
     <!-- Add Step inline form -->
     <div v-if="showAddStep" class="detail__add-step animate-slide-up">
       <div class="detail__add-step-row">
@@ -314,94 +291,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-/* Header */
-.detail__header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
-  gap: 0.75rem;
-}
-
-.detail__header-left {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.detail__title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--c-fg);
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.detail__id {
-  font-size: 0.6875rem;
-  font-family: var(--font-mono);
-  color: var(--c-fg-dim);
-  white-space: nowrap;
-}
-
-.detail__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-/* Action buttons */
-.detail__action-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--c-fg-muted);
-  background: var(--c-bg1);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-  white-space: nowrap;
-}
-
-.detail__action-btn:hover {
-  background: var(--c-surface-active);
-  color: var(--c-fg);
-}
-
-.detail__action-btn--primary {
-  background: var(--c-aqua);
-  color: var(--c-bg-hard);
-}
-
-.detail__action-btn--primary:hover {
-  filter: brightness(1.1);
-}
-
-.detail__action-btn--disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.detail__action-btn--disabled:hover {
-  filter: none;
-}
-
-.detail__action-btn--active {
-  background: var(--c-surface-active);
-  color: var(--c-fg);
 }
 
 /* Add step form */
