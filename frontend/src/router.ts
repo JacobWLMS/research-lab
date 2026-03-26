@@ -18,6 +18,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./components/experiment/CanvasReport.vue'),
     meta: { fullscreen: true },
   },
+  {
+    path: '/experiment/:experimentId/assets',
+    name: 'asset-library',
+    component: () => import('./components/experiment/AssetLibrary.vue'),
+    meta: { fullscreen: true },
+  },
 ]
 
 export const router = createRouter({

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useExperimentDetail } from '../../composables/useExperimentDetail'
 import { useToolbarContext } from '../../composables/useToolbarContext'
+import type { AssetsResponse } from '../../types'
 import PipelineBar from './PipelineBar.vue'
 import StepCanvas from './StepCanvas.vue'
 import TerminalPanel from '../shared/TerminalPanel.vue'
@@ -12,7 +13,28 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const appRouter = useRouter()
 const experimentId = computed(() => props.id ?? (route.params.id as string | undefined) ?? null)
+
+// Asset count for the "Assets" button badge
+const assetCount = ref(0)
+
+async function fetchAssetCount(id: string) {
+  try {
+    const res = await fetch(`/api/experiments/${id}/assets`)
+    if (!res.ok) return
+    const data: AssetsResponse = await res.json()
+    assetCount.value = data.images.length + data.artifacts.length
+  } catch {
+    // non-fatal
+  }
+}
+
+function openAssetLibrary() {
+  if (experimentId.value) {
+    appRouter.push({ name: 'asset-library', params: { experimentId: experimentId.value } })
+  }
+}
 
 const {
   experiment,
@@ -102,6 +124,16 @@ watch(
 onUnmounted(() => {
   toolbarCtx.clearContext()
 })
+
+// Fetch asset count when experiment or results change
+watch(
+  [experimentId, results],
+  () => {
+    const id = experimentId.value
+    if (id) fetchAssetCount(id)
+  },
+  { immediate: true },
+)
 
 function onTerminalResizeStart(e: MouseEvent) {
   isResizingTerminal.value = true
@@ -209,13 +241,29 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Pipeline bar -->
+    <!-- Pipeline bar with assets toggle -->
     <div class="detail__pipeline">
-      <PipelineBar
-        :steps="experiment.steps"
-        :results="results"
-        @click-step="scrollToStep"
-      />
+      <div class="detail__pipeline-top">
+        <PipelineBar
+          :steps="experiment.steps"
+          :results="results"
+          @click-step="scrollToStep"
+        />
+        <button
+          class="detail__assets-btn"
+          @click="openAssetLibrary"
+          title="Browse all experiment assets"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          Assets
+          <span v-if="assetCount > 0" class="detail__assets-badge">{{ assetCount }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- Step cards -->
@@ -368,6 +416,55 @@ onUnmounted(() => {
   flex-shrink: 0;
   border-bottom: 1px solid var(--c-border);
   background: var(--c-surface);
+}
+
+.detail__pipeline-top {
+  display: flex;
+  align-items: center;
+}
+
+.detail__pipeline-top > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail__assets-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  margin-right: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-fg-muted);
+  background: var(--c-bg1);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+
+.detail__assets-btn:hover {
+  border-color: var(--c-fg-dim);
+  color: var(--c-fg);
+  background: var(--c-surface-hover);
+}
+
+.detail__assets-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--c-bg-hard);
+  background: var(--c-aqua);
+  border-radius: 0.5rem;
 }
 
 /* Steps area */

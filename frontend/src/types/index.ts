@@ -235,6 +235,33 @@ export interface TerminalEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Asset library types
+// ---------------------------------------------------------------------------
+
+export interface AssetImage {
+  step_name: string
+  source: 'canvas' | 'result' | 'artifact'
+  canvas_name: string | null
+  title: string
+  mime: string
+  data: string // base64
+  index: number
+}
+
+export interface AssetArtifact {
+  step_name: string
+  name: string
+  format: string
+  path: string
+  size_bytes: number
+}
+
+export interface AssetsResponse {
+  images: AssetImage[]
+  artifacts: AssetArtifact[]
+}
+
+// ---------------------------------------------------------------------------
 // Sort config for experiment list
 // ---------------------------------------------------------------------------
 

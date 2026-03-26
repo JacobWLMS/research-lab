@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import logging
 import re
 import time
 import uuid
+import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from research_lab.pipeline.runner import PipelineRunner
@@ -285,3 +289,91 @@ async def get_all_results(experiment_id: str, request: Request) -> dict:
             result_dict["canvases"] = store.get_canvases(experiment_id, step_name)
         enriched[step_name] = result_dict
     return enriched
+
+
+# ---------------------------------------------------------------------------
+# Asset library endpoints
+# ---------------------------------------------------------------------------
+
+def _safe_filename(s: str) -> str:
+    """Create a filesystem-safe filename component."""
+    return re.sub(r"[^a-zA-Z0-9_\-.]", "_", s)[:80]
+
+
+@router.get("/{experiment_id}/assets")
+async def get_assets(experiment_id: str, request: Request) -> dict:
+    """Return all images and artifacts collected across every step."""
+    store = request.app.state.store
+    exp = store.get(experiment_id)
+    if exp is None:
+        raise HTTPException(404, f"Experiment {experiment_id!r} not found")
+    images, artifacts = store.collect_assets(experiment_id)
+    return {"images": images, "artifacts": artifacts}
+
+
+@router.get("/{experiment_id}/assets/download")
+async def download_assets(experiment_id: str, request: Request) -> StreamingResponse:
+    """Download all images and artifacts as a zip file."""
+    store = request.app.state.store
+    exp = store.get(experiment_id)
+    if exp is None:
+        raise HTTPException(404, f"Experiment {experiment_id!r} not found")
+
+    images, artifacts = store.collect_assets(experiment_id)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Add images
+        for img in images:
+            ext = "png"
+            if img["mime"] == "image/jpeg":
+                ext = "jpg"
+            elif img["mime"] == "image/svg+xml":
+                ext = "svg"
+            fname = _safe_filename(
+                f"{img['step_name']}_{img['index']:03d}_{img['title']}"
+            )
+            try:
+                raw = base64.b64decode(img["data"])
+                zf.writestr(f"images/{fname}.{ext}", raw)
+            except Exception:
+                continue
+
+        # Add artifact files
+        from pathlib import Path
+
+        for art in artifacts:
+            art_path = Path(art["path"])
+            if art_path.exists() and art_path.is_file():
+                zf.write(art_path, f"artifacts/{art['name']}")
+
+    buf.seek(0)
+    filename = _safe_filename(exp.name or experiment_id) + "_assets.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{experiment_id}/assets/{index}")
+async def get_asset_by_index(
+    experiment_id: str, index: int, request: Request
+) -> Response:
+    """Return a single image asset by its global index."""
+    store = request.app.state.store
+    exp = store.get(experiment_id)
+    if exp is None:
+        raise HTTPException(404, f"Experiment {experiment_id!r} not found")
+
+    images, _ = store.collect_assets(experiment_id)
+    match = next((img for img in images if img["index"] == index), None)
+    if match is None:
+        raise HTTPException(404, f"Asset index {index} not found")
+
+    try:
+        raw = base64.b64decode(match["data"])
+    except Exception:
+        raise HTTPException(500, "Failed to decode image data")
+
+    return Response(content=raw, media_type=match["mime"])

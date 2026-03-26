@@ -226,6 +226,88 @@ class ExperimentStore:
         return self._artifacts_dir(experiment_id) / name
 
     # ------------------------------------------------------------------
+    # Asset collection
+    # ------------------------------------------------------------------
+
+    def collect_assets(
+        self, experiment_id: str
+    ) -> tuple[list[dict], list[dict]]:
+        """Collect all images and artifacts across steps.
+
+        Returns ``(images, artifacts)`` where each image dict has keys:
+        step_name, source, canvas_name (optional), title, mime, data, index.
+        Each artifact dict has: step_name, name, format, path, size_bytes.
+        """
+        exp = self.get(experiment_id)
+        if exp is None:
+            return [], []
+
+        step_order = [s.name for s in exp.steps]
+        results = self.get_all_results(experiment_id)
+
+        images: list[dict] = []
+        global_idx = 0
+
+        for step_name in step_order:
+            result = results.get(step_name)
+            if result is None:
+                continue
+
+            # --- Images from result.images (matplotlib inline / display_data) ---
+            for img in result.images:
+                images.append({
+                    "step_name": step_name,
+                    "source": "result",
+                    "canvas_name": None,
+                    "title": img.label or f"Image {global_idx}",
+                    "mime": img.mime,
+                    "data": img.data,
+                    "index": global_idx,
+                })
+                global_idx += 1
+
+            # --- Images from canvases (canvas.add_image()) ---
+            # Check result.canvases first, then persisted canvas file
+            canvas_data = result.canvases
+            if not canvas_data:
+                canvas_data = self.get_canvases(experiment_id, step_name)
+            for canvas in canvas_data:
+                canvas_name = canvas.get("canvas_name") or canvas.get("name") or "Canvas"
+                for widget in canvas.get("widgets", []):
+                    if widget.get("kind") == "image" and widget.get("data"):
+                        # Skip placeholder / non-base64 data
+                        data_str = widget["data"]
+                        if len(data_str) < 100 or data_str.startswith("["):
+                            continue
+                        images.append({
+                            "step_name": step_name,
+                            "source": "canvas",
+                            "canvas_name": canvas_name,
+                            "title": widget.get("title") or f"Image {global_idx}",
+                            "mime": widget.get("mime", "image/png"),
+                            "data": data_str,
+                            "index": global_idx,
+                        })
+                        global_idx += 1
+
+        # --- Artifacts from disk ---
+        artifacts: list[dict] = []
+        artifacts_dir = self._exp_dir(experiment_id) / "artifacts"
+        if artifacts_dir.exists():
+            for f in sorted(artifacts_dir.iterdir()):
+                if f.is_file():
+                    suffix = f.suffix.lstrip(".")
+                    artifacts.append({
+                        "step_name": "",  # can't reliably attribute to a step
+                        "name": f.name,
+                        "format": suffix,
+                        "path": str(f),
+                        "size_bytes": f.stat().st_size,
+                    })
+
+        return images, artifacts
+
+    # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 

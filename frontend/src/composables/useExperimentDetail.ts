@@ -66,9 +66,51 @@ export function useExperimentDetail(experimentId: () => string | null) {
       const data = await res.json()
       if (data && typeof data === 'object' && !Array.isArray(data)) {
         results.value = data as Record<string, StepResult>
+
+        // Populate canvases from results — this is critical for persistence
+        // after navigation. The canvases are stored in result JSON on disk
+        // and included in the results response.
+        const newCanvases: Record<string, CanvasData[]> = {}
+        for (const [stepName, result] of Object.entries(data)) {
+          const r = result as any
+          if (r?.canvases && Array.isArray(r.canvases) && r.canvases.length > 0) {
+            newCanvases[stepName] = r.canvases.map((c: any) => ({
+              name: c.canvas_name || c.name || 'Output',
+              widgets: c.widgets || [],
+            }))
+          }
+        }
+        // Merge with any existing live canvas data (don't overwrite live updates)
+        canvases.value = { ...newCanvases, ...canvases.value }
       }
     } catch {
       // non-fatal
+    }
+  }
+
+  async function fetchStepCanvases(id: string) {
+    // Also fetch canvases per-step for any that the results endpoint missed
+    if (!experiment.value) return
+    for (const step of experiment.value.steps) {
+      if (step.status === 'completed' || step.status === 'failed') {
+        try {
+          const res = await fetch(`/api/experiments/${id}/steps/${step.name}`)
+          if (!res.ok) continue
+          const data = await res.json()
+          const stepCanvases = data?.canvases || data?.result?.canvases || []
+          if (stepCanvases.length > 0 && !canvases.value[step.name]?.length) {
+            canvases.value = {
+              ...canvases.value,
+              [step.name]: stepCanvases.map((c: any) => ({
+                name: c.canvas_name || c.name || 'Output',
+                widgets: c.widgets || [],
+              })),
+            }
+          }
+        } catch {
+          // non-fatal
+        }
+      }
     }
   }
 
@@ -203,7 +245,7 @@ export function useExperimentDetail(experimentId: () => string | null) {
       case 'step_completed': {
         const step = findStep(msg.step_name)
         if (step) step.status = msg.status as StepStatus
-        fetchResults(id)
+        fetchResults(id).then(() => fetchStepCanvases(id))
         // Also refresh experiment list so sidebar status updates
         fetchExperiments()
         // Toast notification
@@ -268,8 +310,8 @@ export function useExperimentDetail(experimentId: () => string | null) {
     }
   })
 
-  // Watch for experiment ID changes -- reset state
-  watch(experimentId, (id) => {
+  // Watch for experiment ID changes -- reset state and reload
+  watch(experimentId, async (id) => {
     if (id) {
       outputLines.value = {}
       liveMetrics.value = {}
@@ -277,8 +319,10 @@ export function useExperimentDetail(experimentId: () => string | null) {
       progress.value = {}
       results.value = {}
       pipelineRunning.value = false
-      fetchExperiment(id)
-      fetchResults(id)
+      await fetchExperiment(id)
+      await fetchResults(id)
+      // Fetch per-step canvases as a fallback (ensures canvas data survives navigation)
+      await fetchStepCanvases(id)
     } else {
       experiment.value = null
     }
