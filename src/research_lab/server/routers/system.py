@@ -45,13 +45,18 @@ async def status(request: Request) -> StatusResponse:
 
 class ExecRequest(BaseModel):
     code: str
+    experiment_id: str | None = None
 
 
 @router.post("/exec", response_model=ExecResult)
 async def exec_code(body: ExecRequest, request: Request) -> ExecResult:
-    """Execute ad-hoc Python code in the kernel."""
+    """Execute Python code in a kernel.
+
+    If experiment_id is provided, uses that experiment's kernel (shared namespace).
+    Otherwise uses the ad-hoc kernel.
+    """
     sessions = request.app.state.sessions
-    kernel = await sessions.get_or_create()
+    kernel = await sessions.get_or_create(body.experiment_id)
 
     stdout_parts: list[str] = []
     stderr_parts: list[str] = []

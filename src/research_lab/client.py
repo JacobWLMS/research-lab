@@ -279,12 +279,16 @@ class ResearchLabClient:
     # Ad-hoc execution
     # ------------------------------------------------------------------
 
-    async def exec_code(self, code: str) -> ExecResult:
-        """Execute code via the REST exec endpoint (POST /api/exec)."""
-        # The exec endpoint is on the WebSocket, so we use the REST
-        # approach: connect compute, then run via a temporary step.
-        # For simplicity, we POST to a dedicated endpoint.
-        data = await self._post("/api/exec", json={"code": code})
+    async def exec_code(self, code: str, experiment_id: str | None = None) -> ExecResult:
+        """Execute code via the REST exec endpoint (POST /api/exec).
+
+        If experiment_id is provided, runs in that experiment's kernel
+        (shared namespace with its steps).
+        """
+        body: dict[str, Any] = {"code": code}
+        if experiment_id:
+            body["experiment_id"] = experiment_id
+        data = await self._post("/api/exec", json=body)
         return ExecResult.model_validate(data)
 
     # ------------------------------------------------------------------

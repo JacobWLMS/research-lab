@@ -22,8 +22,18 @@ from research_lab.schemas import (
 mcp = FastMCP(
     "research-lab",
     instructions=(
-        "AI-first ML experiment management. Use these tools to execute code, "
-        "manage experiments, and retrieve structured results from the research-lab server."
+        "AI-first ML experiment management platform.\n\n"
+        "WORKFLOW: Always create experiments with named steps for real work. "
+        "Do NOT use exec() for experiments — create proper pipeline steps so results "
+        "appear in the web UI with canvases, metrics, and visual reports.\n\n"
+        "1. create_experiment('name') to create an experiment\n"
+        "2. Add steps via the API (POST /api/experiments/{id}/steps)\n"
+        "3. run_experiment(id) or run_step(id, step) to execute\n"
+        "4. get_results(id) to read structured results\n\n"
+        "Use exec() ONLY for quick debugging or one-off queries. "
+        "Pass experiment_id to exec() to run in an experiment's kernel namespace.\n\n"
+        "Steps should use ctx.log_metrics(), ctx.create_canvas(), ctx.save_result() "
+        "to produce structured output visible in the web UI."
     ),
 )
 
@@ -105,14 +115,18 @@ def _auto_start_server() -> None:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def exec(code: str) -> dict[str, Any]:
-    """Execute Python code in the persistent IPython kernel.
+async def exec(code: str, experiment_id: str | None = None) -> dict[str, Any]:
+    """Execute Python code in an IPython kernel.
 
-    Returns structured output including stdout, stderr, images, and the
-    result of the last expression.
+    If experiment_id is provided, runs in that experiment's kernel (shared namespace
+    with its steps — use this to debug or inspect experiment state).
+    If experiment_id is omitted, runs in a shared ad-hoc kernel.
+
+    IMPORTANT: Always create proper experiments with steps for real work.
+    Use exec only for quick one-off queries or debugging.
     """
     async with _get_client() as client:
-        result = await client.exec_code(code)
+        result = await client.exec_code(code, experiment_id=experiment_id)
         return _cap_images(result.model_dump())
 
 
