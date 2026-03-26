@@ -29,7 +29,47 @@ mcp = FastMCP(
 
 
 def _get_client() -> ResearchLabClient:
+    """Get a client, auto-starting the server if needed."""
+    from research_lab.config import read_lockfile
+    lock = read_lockfile()
+    if lock is None:
+        # Try to start the server automatically
+        _auto_start_server()
+        lock = read_lockfile()
+    if lock:
+        return ResearchLabClient(base_url=lock["url"])
     return ResearchLabClient()
+
+
+def _auto_start_server() -> None:
+    """Attempt to start the research-lab server in the background."""
+    import subprocess
+    import sys
+    import time
+    try:
+        # Find project dir — check common locations
+        from research_lab.config import find_project_root
+        from pathlib import Path
+        root = find_project_root()
+        if root is None:
+            # Try home dir
+            home_lab = Path.home() / ".research-lab"
+            if home_lab.is_dir():
+                root = Path.home()
+            else:
+                return  # Can't find a project
+        subprocess.Popen(
+            [sys.executable, "-m", "uvicorn",
+             "research_lab.server.app:create_app", "--factory",
+             "--host", "127.0.0.1", "--port", "8470"],
+            cwd=str(root),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # Wait briefly for it to start
+        time.sleep(3)
+    except Exception:
+        pass  # Best effort
 
 
 # ---------------------------------------------------------------------------

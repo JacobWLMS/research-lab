@@ -78,17 +78,56 @@ def write_lockfile(settings: Settings) -> None:
 
 
 def read_lockfile(project_dir: Path | None = None) -> dict | None:
-    """Read the server lockfile. Returns None if not found."""
-    root = project_dir or find_project_root()
-    if root is None:
-        return None
-    lockfile = root / ".research-lab" / "server.lock"
-    if not lockfile.exists():
-        return None
+    """Read the server lockfile. Searches multiple locations:
+    1. Explicit project_dir
+    2. Walk up from CWD
+    3. Home directory
+    4. RESEARCH_LAB_PROJECT_DIR env var
+    5. The research-lab package install directory
+    """
+    candidates: list[Path] = []
+
+    if project_dir:
+        candidates.append(project_dir)
+
+    # Walk up from CWD
+    root = find_project_root()
+    if root:
+        candidates.append(root)
+
+    # Home directory
+    candidates.append(Path.home())
+
+    # Env var
+    env_dir = os.environ.get("RESEARCH_LAB_PROJECT_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir))
+
+    # Common locations
+    candidates.append(Path.home() / "Documents" / "GitHub" / "research-lab")
+    candidates.append(Path("/root"))
+
+    for candidate in candidates:
+        lockfile = candidate / ".research-lab" / "server.lock"
+        if lockfile.exists():
+            try:
+                data = json.loads(lockfile.read_text())
+                # Verify the server is actually running by checking PID
+                pid = data.get("pid")
+                if pid and _pid_alive(pid):
+                    return data
+            except (json.JSONDecodeError, OSError):
+                continue
+    return None
+
+
+def _pid_alive(pid: int) -> bool:
+    """Check if a process is alive (works on Linux/macOS)."""
     try:
-        return json.loads(lockfile.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
 
 
 def remove_lockfile(settings: Settings) -> None:
