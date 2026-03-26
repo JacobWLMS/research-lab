@@ -205,12 +205,17 @@ class ResearchLabClient:
         self,
         experiment_id: str,
         name: str,
+        *,
+        title: str = "",
+        description: str = "",
         code: str = "",
         depends_on: list[str] | None = None,
         config: dict | None = None,
     ) -> Experiment:
         body = {
             "name": name,
+            "title": title,
+            "description": description,
             "code": code,
             "depends_on": depends_on or [],
             "config": config or {},

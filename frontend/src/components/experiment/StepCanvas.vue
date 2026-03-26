@@ -219,9 +219,11 @@ function openCanvasReport() {
   >
     <!-- Step header bar -->
     <div class="step-card__header">
-      <!-- Left: status, name, duration, run selector -->
+      <!-- Left: status, title/name, description, duration, run selector -->
       <div class="step-card__header-left">
         <StatusBadge :status="step.status" />
+        <span class="step-card__title">{{ step.title || step.name }}</span>
+        <span v-if="step.title" class="step-card__name-id">{{ step.name }}</span>
         <span v-if="activeResult && !isRunning" class="step-card__duration">{{ fmtDur(activeResult.execution_time_s) }}</span>
         <!-- Run history dropdown -->
         <select
@@ -276,6 +278,9 @@ function openCanvasReport() {
         @update:code="(code: string) => emit('updateCode', code)"
       />
     </div>
+
+    <!-- Step description -->
+    <div v-if="step.description" class="step-card__description">{{ step.description }}</div>
 
     <!-- Old run banner -->
     <div v-if="isViewingOldRun" class="step-card__old-run-banner">
@@ -452,6 +457,27 @@ function openCanvasReport() {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.step-card__title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--c-fg);
+}
+
+.step-card__name-id {
+  font-size: 0.625rem;
+  font-family: var(--font-mono);
+  color: var(--c-fg-dim);
+  opacity: 0.7;
+}
+
+.step-card__description {
+  padding: 0.25rem 0.75rem 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--c-fg-muted);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .step-card__duration {

@@ -7,6 +7,8 @@ export type KernelStatus = 'idle' | 'busy' | 'dead' | 'not_connected'
 
 export interface Step {
   name: string
+  title: string
+  description: string
   code: string
   depends_on: string[]
   config: Record<string, unknown>

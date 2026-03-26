@@ -83,7 +83,7 @@ function getPreviewImage(stepName: string): string | null {
         />
         <!-- Name + duration -->
         <div class="pipeline-bar__label">
-          <span class="pipeline-bar__name">{{ step.name }}</span>
+          <span class="pipeline-bar__name">{{ step.title || step.name }}</span>
           <span
             v-if="results[step.name]"
             class="pipeline-bar__duration"

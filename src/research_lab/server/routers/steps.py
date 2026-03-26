@@ -29,12 +29,16 @@ router = APIRouter(prefix="/api/experiments/{experiment_id}/steps", tags=["steps
 
 class CreateStepRequest(BaseModel):
     name: str
+    title: str = ""
+    description: str = ""
     code: str = ""
     depends_on: list[str] = Field(default_factory=list)
     config: dict = Field(default_factory=dict)
 
 
 class UpdateStepRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
     code: str | None = None
     depends_on: list[str] | None = None
     config: dict | None = None
@@ -50,7 +54,10 @@ async def add_step(
 ) -> Experiment:
     store = request.app.state.store
     mgr: ConnectionManager = request.app.state.ws_manager
-    step = Step(name=body.name, code=body.code, depends_on=body.depends_on, config=body.config)
+    step = Step(
+        name=body.name, title=body.title, description=body.description,
+        code=body.code, depends_on=body.depends_on, config=body.config,
+    )
     exp = store.add_step(experiment_id, step)
     if exp is None:
         raise HTTPException(404, "Experiment not found or duplicate step name")

@@ -37,6 +37,8 @@ class Step(BaseModel):
     model_config = {"from_attributes": True}
 
     name: str
+    title: str = ""  # Human-readable title (e.g., "Extract Token Embeddings")
+    description: str = ""  # Optional description of what this step does
     code: str = ""
     depends_on: list[str] = Field(default_factory=list)
     config: dict[str, Any] = Field(default_factory=dict)

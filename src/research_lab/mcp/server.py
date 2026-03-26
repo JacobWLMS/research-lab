@@ -207,6 +207,36 @@ async def create_experiment(
 
 
 @mcp.tool()
+async def add_step(
+    experiment_id: str,
+    name: str,
+    title: str = "",
+    description: str = "",
+    code: str = "",
+    depends_on: list[str] | None = None,
+) -> dict[str, Any]:
+    """Add a step to an experiment.
+
+    Every step should have a clear title and description so the human
+    understands what it does when viewing the pipeline in the web UI.
+
+    Args:
+        experiment_id: The experiment to add the step to
+        name: Technical name (used as identifier, no spaces)
+        title: Human-readable title (e.g., "Extract Token Embeddings")
+        description: What this step does (shown below the title in the UI)
+        code: Python code to execute
+        depends_on: List of step names this step depends on
+    """
+    async with _get_client() as client:
+        exp = await client.add_step(
+            experiment_id, name, title=title, description=description,
+            code=code, depends_on=depends_on or [],
+        )
+        return exp.model_dump()
+
+
+@mcp.tool()
 async def inspect_namespace(experiment_id: str) -> dict[str, Any]:
     """Inspect the kernel namespace for a running experiment.
 
