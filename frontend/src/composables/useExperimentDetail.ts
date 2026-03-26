@@ -182,21 +182,21 @@ export function useExperimentDetail(experimentId: () => string | null) {
       case 'step_started': {
         const step = findStep(msg.step_name)
         if (step) step.status = 'running' as StepStatus
-        outputLines.value[msg.step_name] = []
-        liveMetrics.value[msg.step_name] = {}
-        progress.value[msg.step_name] = { current: 0, total: 0 }
+        outputLines.value = { ...outputLines.value, [msg.step_name]: [] }
+        liveMetrics.value = { ...liveMetrics.value, [msg.step_name]: {} }
+        progress.value = { ...progress.value, [msg.step_name]: { current: 0, total: 0 } }
         break
       }
 
       case 'stdout': {
         if (!outputLines.value[msg.step_name]) outputLines.value[msg.step_name] = []
-        outputLines.value[msg.step_name].push(msg.text)
+        outputLines.value[msg.step_name] = [...outputLines.value[msg.step_name], msg.text]
         break
       }
 
       case 'stderr': {
         if (!outputLines.value[msg.step_name]) outputLines.value[msg.step_name] = []
-        outputLines.value[msg.step_name].push(msg.text)
+        outputLines.value[msg.step_name] = [...outputLines.value[msg.step_name], msg.text]
         break
       }
 

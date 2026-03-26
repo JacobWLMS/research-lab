@@ -5,6 +5,7 @@ import type {
   Step,
   StepResult,
   CanvasData,
+  ImageWidgetData,
 } from '../../types'
 import StatusBadge from '../shared/StatusBadge.vue'
 import StreamingOutput from '../shared/StreamingOutput.vue'
@@ -69,13 +70,34 @@ const experimentId = computed(() => {
   return (route.params.id as string) ?? ''
 })
 
+// Re-run indicator: show badge when run_number > 1
+const runNumber = computed(() => props.result?.run_number ?? 0)
+const isRerun = computed(() => runNumber.value > 1)
+
+// Image thumbnails from canvases
+const imageThumbnails = computed(() => {
+  const images: { canvasName: string; title: string; src: string }[] = []
+  for (const canvas of props.canvases) {
+    for (const widget of canvas.widgets) {
+      if (widget.kind === 'image') {
+        const img = widget as ImageWidgetData
+        images.push({
+          canvasName: canvas.name,
+          title: img.title || 'Image',
+          src: `data:${img.mime};base64,${img.data}`,
+        })
+      }
+    }
+  }
+  return images
+})
+
 function fmtDur(s: number | undefined): string {
-  if (!s) return ''
-  if (s < 1) return `${(s * 1000).toFixed(0)}ms`
-  if (s < 60) return `${s.toFixed(1)}s`
+  if (s == null || s < 0) return ''
+  if (s < 60) return `${Math.round(s)}s`
   const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}m ${sec}s`
+  const sec = Math.round(s % 60)
+  return sec > 0 ? `${m}m ${sec}s` : `${m}m`
 }
 
 function fmtEta(s?: number): string {
@@ -84,6 +106,33 @@ function fmtEta(s?: number): string {
   const m = Math.floor(s / 60)
   const sec = Math.ceil(s % 60)
   return `~${m}m ${sec}s`
+}
+
+// Strip ANSI escape codes from text
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+// Format a Python traceback with basic syntax highlighting via HTML spans
+function formatTraceback(text: string): string {
+  const cleaned = stripAnsi(text)
+  const lines = cleaned.split('\n')
+  return lines.map((line) => {
+    const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // "File" lines
+    if (/^\s*File\s+"/.test(line)) {
+      return `<span class="tb-file">${escaped}</span>`
+    }
+    // "line N" references within a File line
+    if (/^\s*line\s+\d+/.test(line)) {
+      return `<span class="tb-lineno">${escaped}</span>`
+    }
+    // The final error type line (e.g. "ValueError: ...")
+    if (/^[A-Z]\w*(Error|Exception|Warning)/.test(line)) {
+      return `<span class="tb-error-type">${escaped}</span>`
+    }
+    return escaped
+  }).join('\n')
 }
 
 function openCanvasReport() {
@@ -109,10 +158,11 @@ function openCanvasReport() {
   >
     <!-- Step header bar -->
     <div class="step-card__header">
-      <!-- Left: status, name, duration -->
+      <!-- Left: status, name, duration, re-run badge -->
       <div class="step-card__header-left">
         <StatusBadge :status="step.status" />
         <span v-if="result" class="step-card__duration">{{ fmtDur(result.execution_time_s) }}</span>
+        <span v-if="isRerun" class="step-card__rerun-badge">Run #{{ runNumber }}</span>
         <span v-if="isRunning" class="step-card__running-label">Running...</span>
       </div>
 
@@ -238,6 +288,18 @@ function openCanvasReport() {
       </div>
     </div>
 
+    <!-- Image thumbnails row -->
+    <div v-if="imageThumbnails.length > 0" class="step-card__thumbnails" @click="openCanvasReport">
+      <img
+        v-for="(img, idx) in imageThumbnails"
+        :key="idx"
+        :src="img.src"
+        :alt="img.title"
+        :title="img.title"
+        class="step-card__thumbnail"
+      />
+    </div>
+
     <!-- Logs panel (collapsible) -->
     <div v-if="showLogs" class="step-card__logs animate-slide-up">
       <template v-if="result">
@@ -247,7 +309,16 @@ function openCanvasReport() {
           <div class="step-card__logs-label step-card__logs-label--error">Stderr</div>
           <StreamingOutput :lines="result.stderr.split('\n')" />
         </div>
-        <div v-if="result.error" class="step-card__error-box">{{ result.error }}</div>
+        <div v-if="result.error" class="step-card__error-block">
+          <div class="step-card__error-block-header">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4m0 4h.01" stroke-linecap="round"/>
+            </svg>
+            Error
+          </div>
+          <pre class="step-card__error-traceback" v-html="formatTraceback(result.error)" />
+        </div>
       </template>
       <div v-else class="step-card__logs-empty">No logs available</div>
     </div>
@@ -504,14 +575,87 @@ function openCanvasReport() {
   margin-top: 0.5rem;
 }
 
-.step-card__error-box {
+/* Re-run badge */
+.step-card__rerun-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 0.0625rem 0.375rem;
+  background: var(--c-purple);
+  color: var(--c-bg-hard);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* Image thumbnails */
+.step-card__thumbnails {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--c-border-subtle);
+  overflow-x: auto;
+  cursor: pointer;
+}
+
+.step-card__thumbnail {
+  height: 3rem;
+  max-width: 6rem;
+  object-fit: cover;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.12s, opacity 0.12s;
+  flex-shrink: 0;
+}
+
+.step-card__thumbnail:hover {
+  border-color: var(--c-aqua);
+  opacity: 0.85;
+}
+
+/* Error block with red border */
+.step-card__error-block {
   margin-top: 0.5rem;
+  border: 1px solid var(--c-red);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.step-card__error-block-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--c-red);
+  color: var(--c-bg-hard);
+}
+
+.step-card__error-traceback {
+  margin: 0;
   padding: 0.5rem;
   font-size: 0.75rem;
   font-family: var(--font-mono);
-  background: var(--c-bg1);
+  background: var(--c-bg-hard);
+  color: var(--c-fg2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.step-card__error-traceback :deep(.tb-file) {
+  color: var(--c-aqua);
+}
+
+.step-card__error-traceback :deep(.tb-lineno) {
+  color: var(--c-yellow);
+}
+
+.step-card__error-traceback :deep(.tb-error-type) {
   color: var(--c-red);
-  border-radius: var(--radius-sm);
+  font-weight: 600;
 }
 
 .step-card__logs-empty {

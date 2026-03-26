@@ -19,13 +19,12 @@ function statusColor(status: string): string {
   }
 }
 
-function fmtDur(s: number | undefined): string {
-  if (!s) return ''
-  if (s < 1) return `${(s * 1000).toFixed(0)}ms`
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}m ${sec}s`
+function formatDuration(seconds: number | undefined): string {
+  if (seconds == null || seconds < 0) return ''
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const min = Math.floor(seconds / 60)
+  const sec = Math.round(seconds % 60)
+  return sec > 0 ? `${min}m ${sec}s` : `${min}m`
 }
 
 function statusLabel(status: string): string {
@@ -46,7 +45,7 @@ function statusLabel(status: string): string {
       <!-- Step node -->
       <button
         class="pipeline-bar__node"
-        :title="`${step.name} - ${statusLabel(step.status)}${results[step.name] ? ' (' + fmtDur(results[step.name].execution_time_s) + ')' : ''}`"
+        :title="`${step.name} - ${statusLabel(step.status)}${results[step.name] ? ' (' + formatDuration(results[step.name].execution_time_s) + ')' : ''}`"
         @click="emit('clickStep', step.name)"
       >
         <!-- Status dot -->
@@ -61,7 +60,7 @@ function statusLabel(status: string): string {
           <span
             v-if="results[step.name]"
             class="pipeline-bar__duration"
-          >{{ fmtDur(results[step.name].execution_time_s) }}</span>
+          >{{ formatDuration(results[step.name].execution_time_s) }}</span>
         </div>
       </button>
     </template>

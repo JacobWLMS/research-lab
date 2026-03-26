@@ -26,7 +26,23 @@ const {
   runAllDisabled: toolbarRunAllDisabled,
   triggerRunPipeline,
   triggerAddStep,
+  triggerRefreshDetail,
 } = useToolbarContext()
+
+// GPU VRAM utilization color indicator
+const gpuVramPct = computed(() => {
+  if (!gpu.value) return 0
+  if (gpu.value.memory_total_gb <= 0) return 0
+  return (gpu.value.memory_used_gb / gpu.value.memory_total_gb) * 100
+})
+
+const gpuVramColor = computed(() => {
+  const pct = gpuVramPct.value
+  if (pct >= 90) return 'var(--c-red)'
+  if (pct >= 70) return 'var(--c-yellow)'
+  return 'var(--c-green)'
+})
+
 
 // Panel state
 const PANEL_STORAGE_KEY = 'research-lab-panel-width'
@@ -86,6 +102,7 @@ async function doRefresh() {
   if (refreshing.value) return
   refreshing.value = true
   await fetchExperiments()
+  triggerRefreshDetail()
   refreshing.value = false
 }
 
@@ -192,13 +209,18 @@ onUnmounted(() => {
       <!-- Center group: GPU stats -->
       <div class="app-shell__toolbar-center">
         <template v-if="gpu">
-          <span class="app-shell__gpu-label">GPU</span>
-          <span class="app-shell__gpu-val">{{ gpu.utilization_pct }}%</span>
-          <span class="app-shell__gpu-sep">|</span>
-          <span class="app-shell__gpu-label">VRAM</span>
-          <span class="app-shell__gpu-val">{{ gpu.memory_used_gb.toFixed(1) }}/{{ gpu.memory_total_gb.toFixed(0) }}GB</span>
-          <span class="app-shell__gpu-sep">|</span>
-          <span class="app-shell__gpu-val">{{ gpu.temperature_c }}&deg;C</span>
+          <span
+            class="app-shell__gpu-dot"
+            :style="{ background: gpuVramColor }"
+            :title="`VRAM ${Math.round(gpuVramPct)}%`"
+          />
+          <span class="app-shell__gpu-text">
+            <span class="app-shell__gpu-val">GPU {{ gpu.utilization_pct }}%</span>
+            <span class="app-shell__gpu-sep">|</span>
+            <span class="app-shell__gpu-val" :style="{ color: gpuVramColor }">{{ gpu.memory_used_gb.toFixed(1) }}/{{ gpu.memory_total_gb.toFixed(0) }}GB</span>
+            <span class="app-shell__gpu-sep">|</span>
+            <span class="app-shell__gpu-val">{{ gpu.temperature_c }}&deg;C</span>
+          </span>
         </template>
       </div>
 
@@ -484,13 +506,24 @@ onUnmounted(() => {
 }
 
 /* GPU stats */
-.app-shell__gpu-label {
-  color: var(--c-fg-muted);
+.app-shell__gpu-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.app-shell__gpu-text {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
 }
 
 .app-shell__gpu-val {
   font-family: var(--font-mono);
   color: var(--c-fg);
+  white-space: nowrap;
 }
 
 .app-shell__gpu-sep {
@@ -630,5 +663,36 @@ onUnmounted(() => {
   overflow: hidden;
   background: var(--c-bg-hard);
   min-width: 25rem; /* 400px */
+}
+
+/* ---- Responsive: hide GPU text on narrower screens, just show dot ---- */
+@media (max-width: 1200px) {
+  .app-shell__gpu-text {
+    display: none;
+  }
+}
+
+/* ---- Responsive: collapse zoom + connection label on narrow screens ---- */
+@media (max-width: 900px) {
+  .app-shell__gpu-text {
+    display: none;
+  }
+
+  .zoom-dropdown-area {
+    display: none;
+  }
+
+  .app-shell__conn-label {
+    display: none;
+  }
+
+  .app-shell__breadcrumb-name {
+    max-width: 8rem;
+  }
+
+  .app-shell__action-btn {
+    padding: 0.1875rem 0.375rem;
+    font-size: 0.625rem;
+  }
 }
 </style>

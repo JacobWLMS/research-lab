@@ -12,6 +12,7 @@ const runAllDisabled = ref(false)
 // Callbacks -- set by ExperimentDetail, invoked by AppShell toolbar buttons
 let _onRunPipeline: (() => void) | null = null
 let _onAddStep: (() => void) | null = null
+let _onRefreshDetail: (() => void) | null = null
 
 function setContext(opts: {
   name: string | null
@@ -20,6 +21,7 @@ function setContext(opts: {
   runAllDisabled: boolean
   onRunPipeline: (() => void) | null
   onAddStep: (() => void) | null
+  onRefreshDetail?: (() => void) | null
 }) {
   experimentName.value = opts.name
   experimentStatus.value = opts.status
@@ -27,6 +29,7 @@ function setContext(opts: {
   runAllDisabled.value = opts.runAllDisabled
   _onRunPipeline = opts.onRunPipeline
   _onAddStep = opts.onAddStep
+  _onRefreshDetail = opts.onRefreshDetail ?? null
 }
 
 function clearContext() {
@@ -36,6 +39,7 @@ function clearContext() {
   runAllDisabled.value = false
   _onRunPipeline = null
   _onAddStep = null
+  _onRefreshDetail = null
 }
 
 function triggerRunPipeline() {
@@ -44,6 +48,10 @@ function triggerRunPipeline() {
 
 function triggerAddStep() {
   _onAddStep?.()
+}
+
+function triggerRefreshDetail() {
+  _onRefreshDetail?.()
 }
 
 export function useToolbarContext() {
@@ -56,5 +64,6 @@ export function useToolbarContext() {
     clearContext,
     triggerRunPipeline,
     triggerAddStep,
+    triggerRefreshDetail,
   }
 }

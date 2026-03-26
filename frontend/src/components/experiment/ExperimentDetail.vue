@@ -29,6 +29,8 @@ const {
   updateStepCode,
   addStep,
   runPipeline,
+  fetchExperiment,
+  fetchResults,
   send,
 } = useExperimentDetail(() => experimentId.value)
 
@@ -82,6 +84,13 @@ watch(
         runAllDisabled: runAllDisabled.value,
         onRunPipeline: () => { if (!runAllDisabled.value) runPipeline() },
         onAddStep: openAddStep,
+        onRefreshDetail: () => {
+          const id = experimentId.value
+          if (id) {
+            fetchExperiment(id)
+            fetchResults(id)
+          }
+        },
       })
     } else {
       toolbarCtx.clearContext()
