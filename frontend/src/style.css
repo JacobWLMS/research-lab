@@ -141,15 +141,28 @@ html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 body {
   margin: 0;
   background: var(--c-bg-hard);
   color: var(--c-fg);
-  line-height: 1.5;
+  line-height: 1.45;
+  font-size: 0.8125rem;
   transition: background var(--transition-smooth), color var(--transition-smooth);
+}
+
+/* ---- Mission Control density tokens ---- */
+:root {
+  --mc-gap-xs: 0.25rem;
+  --mc-gap-sm: 0.5rem;
+  --mc-gap-md: 0.75rem;
+  --mc-gap-lg: 1rem;
+  --mc-panel-pad: 0.5rem;
+  --mc-label-size: 0.6875rem;
+  --mc-body-size: 0.8125rem;
+  --mc-panel-border: 1px solid var(--c-border);
 }
 
 /* ---- Scrollbar ---- */

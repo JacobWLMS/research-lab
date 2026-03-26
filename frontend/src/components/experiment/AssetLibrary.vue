@@ -6,7 +6,7 @@ import type { AssetImage, AssetArtifact, AssetsResponse, RunSummary } from '../.
 const route = useRoute()
 const router = useRouter()
 
-const experimentId = computed(() => route.params.experimentId as string)
+const experimentId = computed(() => (route.params.experimentId ?? route.params.id) as string)
 
 const images = ref<AssetImage[]>([])
 const artifacts = ref<AssetArtifact[]>([])

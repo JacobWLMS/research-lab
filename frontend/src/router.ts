@@ -1,26 +1,28 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
+const AppShell = () => import('./components/layout/AppShell.vue')
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'dashboard',
-    component: () => import('./components/experiment/ExperimentDetail.vue'),
+    name: 'home',
+    component: AppShell,
   },
   {
     path: '/experiment/:id',
     name: 'experiment',
-    component: () => import('./components/experiment/ExperimentDetail.vue'),
+    component: AppShell,
     props: true,
   },
   {
-    path: '/experiment/:experimentId/step/:stepName/canvas',
-    name: 'canvas-report',
-    component: () => import('./components/experiment/CanvasReport.vue'),
-    meta: { fullscreen: true },
+    path: '/experiment/:id/step/:stepName',
+    name: 'step',
+    component: AppShell,
+    props: true,
   },
   {
-    path: '/experiment/:experimentId/assets',
-    name: 'asset-library',
+    path: '/experiment/:id/assets',
+    name: 'assets',
     component: () => import('./components/experiment/AssetLibrary.vue'),
     meta: { fullscreen: true },
   },
