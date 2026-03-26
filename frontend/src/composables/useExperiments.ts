@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
-import type { Experiment, SortField } from '../types'
+import type { Experiment, SortField, WsMessage } from '../types'
+import { useWebSocket } from './useWebSocket'
 
 // Singleton state
 const experiments = ref<Experiment[]>([])
@@ -7,6 +8,26 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const sortField = ref<SortField>('updated_at')
 const sortAsc = ref(false)
+
+// Auto-refresh on WebSocket events — subscribe once
+let wsSubscribed = false
+function ensureWsSubscription() {
+  if (wsSubscribed) return
+  wsSubscribed = true
+  const { subscribe } = useWebSocket()
+  subscribe((msg: WsMessage) => {
+    switch (msg.type) {
+      case 'experiment_created':
+      case 'step_added':
+      case 'step_started':
+      case 'step_completed':
+      case 'pipeline_completed':
+        // Refresh the experiment list on any mutation
+        fetchExperiments()
+        break
+    }
+  })
+}
 
 function statusWeight(exp: Experiment): number {
   const steps = exp.steps
@@ -97,6 +118,7 @@ function setSort(field: SortField) {
 }
 
 export function useExperiments() {
+  ensureWsSubscription()
   return {
     experiments: sorted,
     raw: experiments,

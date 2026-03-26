@@ -49,10 +49,17 @@ async def add_step(
     experiment_id: str, body: CreateStepRequest, request: Request
 ) -> Experiment:
     store = request.app.state.store
+    mgr: ConnectionManager = request.app.state.ws_manager
     step = Step(name=body.name, code=body.code, depends_on=body.depends_on, config=body.config)
     exp = store.add_step(experiment_id, step)
     if exp is None:
         raise HTTPException(404, "Experiment not found or duplicate step name")
+    await mgr.broadcast({
+        "type": "step_added",
+        "experiment_id": experiment_id,
+        "step_name": body.name,
+        "experiment": exp.model_dump(mode="json"),
+    })
     return exp
 
 

@@ -174,6 +174,18 @@ export interface WsExecResult {
   result: string | null
 }
 
+export interface WsExperimentCreated {
+  type: 'experiment_created'
+  experiment: Experiment
+}
+
+export interface WsStepAdded {
+  type: 'step_added'
+  experiment_id: string
+  step_name: string
+  experiment: Experiment
+}
+
 export type WsMessage =
   | WsStepStarted
   | WsStdout
@@ -185,6 +197,8 @@ export type WsMessage =
   | WsProgress
   | WsPipelineCompleted
   | WsExecResult
+  | WsExperimentCreated
+  | WsStepAdded
 
 // ---------------------------------------------------------------------------
 // API response helpers

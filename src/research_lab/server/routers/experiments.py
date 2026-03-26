@@ -60,6 +60,7 @@ async def list_experiments(request: Request) -> list[Experiment]:
 @router.post("", response_model=Experiment, status_code=201)
 async def create_experiment(body: CreateExperimentRequest, request: Request) -> Experiment:
     store = request.app.state.store
+    mgr: ConnectionManager = request.app.state.ws_manager
     now = datetime.now(timezone.utc)
     exp = Experiment(
         id=_slug(body.name),
@@ -69,7 +70,9 @@ async def create_experiment(body: CreateExperimentRequest, request: Request) -> 
         compute_backend=body.compute_backend,
         steps=body.steps,
     )
-    return store.create(exp)
+    result = store.create(exp)
+    await mgr.broadcast({"type": "experiment_created", "experiment": result.model_dump(mode="json")})
+    return result
 
 
 @router.get("/{experiment_id}", response_model=Experiment)
