@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { Step, StepResult } from '../../types'
 
-defineProps<{
+import type { CanvasData } from '../../types'
+
+const props = defineProps<{
   steps: Step[]
   results: Record<string, StepResult>
+  canvases?: Record<string, CanvasData[]>
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +32,30 @@ function formatDuration(seconds: number | undefined): string {
 
 function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function getPreviewImage(stepName: string): string | null {
+  // Find first image widget from canvases, or first image from step result
+  const stepCanvases = props.canvases?.[stepName] || []
+  for (const canvas of stepCanvases) {
+    for (const widget of canvas.widgets || []) {
+      if (widget.kind === 'image' && 'data' in widget && (widget as any).data) {
+        const data = (widget as any).data as string
+        if (data.length > 100 && !data.startsWith('[')) {
+          return `data:${(widget as any).mime || 'image/png'};base64,${data}`
+        }
+      }
+    }
+  }
+  // Check step result images
+  const result = props.results[stepName]
+  if (result?.images?.length) {
+    const img = result.images[0]
+    if (img.data && img.data.length > 100 && !img.data.startsWith('[')) {
+      return `data:${img.mime || 'image/png'};base64,${img.data}`
+    }
+  }
+  return null
 }
 </script>
 
@@ -62,6 +89,13 @@ function statusLabel(status: string): string {
             class="pipeline-bar__duration"
           >{{ formatDuration(results[step.name].execution_time_s) }}</span>
         </div>
+        <!-- Preview image (first from canvas/result, max 1) -->
+        <img
+          v-if="getPreviewImage(step.name)"
+          :src="getPreviewImage(step.name)!"
+          class="pipeline-bar__preview"
+          alt="preview"
+        />
       </button>
     </template>
 
@@ -131,6 +165,21 @@ function statusLabel(status: string): string {
   font-family: var(--font-mono);
   color: var(--c-fg-dim);
   line-height: 1.2;
+}
+
+.pipeline-bar__preview {
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
+  flex-shrink: 0;
+  opacity: 0.9;
+  transition: opacity 0.12s;
+}
+
+.pipeline-bar__node:hover .pipeline-bar__preview {
+  opacity: 1;
 }
 
 .pipeline-bar__empty {

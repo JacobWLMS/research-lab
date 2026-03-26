@@ -161,9 +161,8 @@ function openCanvasReport() {
       <!-- Left: status, name, duration, re-run badge -->
       <div class="step-card__header-left">
         <StatusBadge :status="step.status" />
-        <span v-if="result" class="step-card__duration">{{ fmtDur(result.execution_time_s) }}</span>
-        <span v-if="isRerun" class="step-card__rerun-badge">Run #{{ runNumber }}</span>
-        <span v-if="isRunning" class="step-card__running-label">Running...</span>
+        <span v-if="result && !isRunning" class="step-card__duration">{{ fmtDur(result.execution_time_s) }}</span>
+        <span v-if="isRerun && !isRunning" class="step-card__rerun-badge">Run #{{ runNumber }}</span>
       </div>
 
       <!-- Right: disclosures + actions -->
@@ -268,7 +267,7 @@ function openCanvasReport() {
 
         <div style="flex: 1" />
 
-        <!-- View Report button -->
+        <!-- View Output button -->
         <button
           v-if="hasCanvases"
           class="step-card__report-btn"
@@ -278,13 +277,13 @@ function openCanvasReport() {
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
             <path d="M3 9h18M9 21V9" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          View Report
+          View Output
           <span class="step-card__widget-count">{{ canvasWidgetCount }}</span>
         </button>
         <span
           v-else-if="step.status === 'completed' || step.status === 'failed'"
           class="step-card__no-report"
-        >No report</span>
+        >No output</span>
       </div>
     </div>
 
