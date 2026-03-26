@@ -242,6 +242,29 @@ function ensureWsSubscription(experimentId: () => string | null) {
         break
       }
 
+      case 'step_added':
+      case 'step_updated': {
+        const exp = (msg as any).experiment
+        if (exp && exp.id === id) {
+          experiment.value = exp
+        }
+        break
+      }
+
+      case 'step_deleted': {
+        // Re-fetch since we don't have the full experiment in this event
+        fetchExperiment(id)
+        break
+      }
+
+      case 'experiment_updated': {
+        const exp = (msg as any).experiment
+        if (exp && exp.id === id) {
+          experiment.value = exp
+        }
+        break
+      }
+
       case 'experiment_deleted': {
         if (msg.experiment_id === id) {
           experiment.value = null

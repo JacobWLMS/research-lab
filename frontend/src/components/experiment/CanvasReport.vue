@@ -423,11 +423,11 @@ watch([experimentId, stepName, runNumber], () => {
 }
 
 .canvas-report__widgets {
-  max-width: 75rem;
+  max-width: 90rem;
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
 }
 
 /* ---- Widget variants ---- */
@@ -437,12 +437,30 @@ watch([experimentId, stepName, runNumber], () => {
 }
 
 .canvas-report__widget--chart {
-  min-height: 31.25rem;
+  min-height: 20rem;
 }
 
 .canvas-report__widget--chart :deep(.w-full) {
-  min-height: 31.25rem;
-  height: 35rem;
+  min-height: 20rem;
+  height: 22rem;
+}
+
+/* Single chart gets full width */
+.canvas-report__widget--chart:only-of-type {
+  grid-column: 1 / -1;
+}
+
+.canvas-report__widget--chart:only-of-type :deep(.w-full) {
+  height: 28rem;
+}
+
+/* Text and metrics always span full width */
+.canvas-report__widget--text {
+  grid-column: 1 / -1;
+}
+
+.canvas-report__widget--metrics {
+  grid-column: 1 / -1;
 }
 
 .canvas-report__widget--metrics :deep(.metric-strip) {
@@ -455,9 +473,22 @@ watch([experimentId, stepName, runNumber], () => {
   line-height: 1.7;
 }
 
+/* Images stay in grid cells (2 per row) */
 .canvas-report__widget--image :deep(img) {
   max-width: 100%;
   max-height: 43.75rem;
+}
+
+/* Single image gets full width */
+.canvas-report__widget--image:only-of-type {
+  grid-column: 1 / -1;
+}
+
+/* Responsive: single column below 900px */
+@media (max-width: 900px) {
+  .canvas-report__widgets {
+    grid-template-columns: 1fr;
+  }
 }
 
 .canvas-report__widget-empty {

@@ -17,14 +17,39 @@ function ensureWsSubscription() {
   const { subscribe } = useWebSocket()
   subscribe((msg: WsMessage) => {
     switch (msg.type) {
-      case 'experiment_created':
+      case 'experiment_created': {
+        const exp = (msg as any).experiment
+        if (exp) experiments.value = [...experiments.value, exp]
+        break
+      }
       case 'step_added':
-      case 'step_started':
-      case 'step_completed':
+      case 'step_updated':
+      case 'step_completed': {
+        const exp = (msg as any).experiment
+        if (exp) {
+          experiments.value = experiments.value.map(e => e.id === exp.id ? exp : e)
+        }
+        break
+      }
+      case 'experiment_updated': {
+        const exp = (msg as any).experiment
+        if (exp) {
+          experiments.value = experiments.value.map(e => e.id === exp.id ? exp : e)
+        }
+        break
+      }
+      case 'experiment_deleted': {
+        const eid = (msg as any).experiment_id
+        experiments.value = experiments.value.filter(e => e.id !== eid)
+        break
+      }
+      case 'step_deleted':
       case 'pipeline_completed':
-        // Refresh the experiment list on any mutation
+      case 'step_started': {
+        // These may not have the full experiment -- do a lightweight fetch
         fetchExperiments()
         break
+      }
     }
   })
 }

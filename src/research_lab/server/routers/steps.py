@@ -94,10 +94,17 @@ async def update_step(
     experiment_id: str, step_name: str, body: UpdateStepRequest, request: Request
 ) -> Experiment:
     store = request.app.state.store
+    mgr: ConnectionManager = request.app.state.ws_manager
     updates = body.model_dump(exclude_none=True)
     exp = store.update_step(experiment_id, step_name, updates)
     if exp is None:
         raise HTTPException(404, "Experiment or step not found")
+    await mgr.broadcast({
+        "type": "step_updated",
+        "experiment_id": experiment_id,
+        "step_name": step_name,
+        "experiment": exp.model_dump(mode="json"),
+    })
     return exp
 
 
@@ -106,9 +113,15 @@ async def delete_step(
     experiment_id: str, step_name: str, request: Request
 ) -> Experiment:
     store = request.app.state.store
+    mgr: ConnectionManager = request.app.state.ws_manager
     exp = store.delete_step(experiment_id, step_name)
     if exp is None:
         raise HTTPException(404, "Experiment or step not found")
+    await mgr.broadcast({
+        "type": "step_deleted",
+        "experiment_id": experiment_id,
+        "step_name": step_name,
+    })
     return exp
 
 
@@ -213,23 +226,27 @@ async def _run_step_background(
         result = await runner.run_step(experiment_id, step_name)
         elapsed = round(time.monotonic() - t0, 1)
 
-        # Broadcast step_completed
+        # Broadcast step_completed with the full updated experiment
+        exp = store.get(experiment_id)
         await mgr.broadcast({
             "type": "step_completed",
             "experiment_id": experiment_id,
             "step_name": step_name,
             "status": result.status,
             "duration_s": elapsed,
+            "experiment": exp.model_dump(mode="json") if exp else None,
         })
     except Exception:
         elapsed = round(time.monotonic() - t0, 1)
         logger.exception("Background step %s/%s failed", experiment_id, step_name)
+        exp = store.get(experiment_id)
         await mgr.broadcast({
             "type": "step_completed",
             "experiment_id": experiment_id,
             "step_name": step_name,
             "status": "failed",
             "duration_s": elapsed,
+            "experiment": exp.model_dump(mode="json") if exp else None,
         })
 
 

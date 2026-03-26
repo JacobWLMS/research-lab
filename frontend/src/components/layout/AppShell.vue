@@ -10,6 +10,8 @@ import { useToast } from '../../composables/useToast'
 import { useToolbarContext } from '../../composables/useToolbarContext'
 import ExperimentList from '../experiment/ExperimentList.vue'
 import StatusBadge from '../shared/StatusBadge.vue'
+import NotificationPanel from '../shared/NotificationPanel.vue'
+import { useNotifications } from '../../composables/useNotifications'
 
 const router = useRouter()
 const route = useRoute()
@@ -69,8 +71,10 @@ const isResizing = ref(false)
 const MIN_W = 200
 const MAX_W = 450
 
+const { unreadCount } = useNotifications()
 const refreshing = ref(false)
 const showZoomDropdown = ref(false)
+const showNotifications = ref(false)
 
 // Persist panel state
 watch(panelWidth, (w) => {
@@ -135,11 +139,14 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-// Close zoom dropdown on outside click
+// Close zoom dropdown and notification panel on outside click
 function onDocClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.zoom-dropdown-area')) {
     showZoomDropdown.value = false
+  }
+  if (!target.closest('.notif-dropdown-area')) {
+    showNotifications.value = false
   }
 }
 
@@ -306,6 +313,25 @@ onUnmounted(() => {
               @click="onZoomSelect(level)"
             >{{ level }}%</button>
           </div>
+        </div>
+
+        <!-- Notification bell -->
+        <div class="notif-dropdown-area" style="position: relative">
+          <button
+            class="app-shell__icon-btn app-shell__notif-btn"
+            title="Notifications"
+            @click.stop="showNotifications = !showNotifications"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M13.73 21a2 2 0 01-3.46 0" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span
+              v-if="unreadCount > 0"
+              class="app-shell__notif-badge"
+            >{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+          </button>
+          <NotificationPanel v-if="showNotifications" />
         </div>
 
         <!-- Connection indicator -->
@@ -588,6 +614,31 @@ onUnmounted(() => {
 .app-shell__zoom-option--active {
   color: var(--c-aqua);
   font-weight: 600;
+}
+
+/* Notification bell */
+.app-shell__notif-btn {
+  position: relative;
+}
+
+.app-shell__notif-badge {
+  position: absolute;
+  top: 0.0625rem;
+  right: 0.0625rem;
+  min-width: 0.875rem;
+  height: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.1875rem;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--c-bg-hard);
+  background: var(--c-red);
+  border-radius: 0.4375rem;
+  pointer-events: none;
+  line-height: 1;
 }
 
 /* Connection status */

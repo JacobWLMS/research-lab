@@ -93,6 +93,7 @@ async def update_experiment(
     experiment_id: str, body: UpdateExperimentRequest, request: Request
 ) -> Experiment:
     store = request.app.state.store
+    mgr: ConnectionManager = request.app.state.ws_manager
     exp = store.get(experiment_id)
     if exp is None:
         raise HTTPException(404, f"Experiment {experiment_id!r} not found")
@@ -100,7 +101,13 @@ async def update_experiment(
         exp.name = body.name
     if body.compute_backend is not None:
         exp.compute_backend = body.compute_backend
-    return store.update(exp)
+    exp = store.update(exp)
+    await mgr.broadcast({
+        "type": "experiment_updated",
+        "experiment_id": experiment_id,
+        "experiment": exp.model_dump(mode="json"),
+    })
+    return exp
 
 
 @router.delete("/{experiment_id}")
@@ -176,7 +183,8 @@ async def _run_pipeline_background(
         # skips completed steps, and auto-runs dependencies
         results = await runner.run_pipeline(experiment_id)
 
-        # Broadcast completion for each step that ran
+        # Broadcast completion for each step that ran (include full experiment)
+        exp = store.get(experiment_id)
         for result in results:
             await mgr.broadcast({
                 "type": "step_completed",
@@ -184,6 +192,7 @@ async def _run_pipeline_background(
                 "step_name": result.step_name,
                 "status": result.status,
                 "duration_s": result.execution_time_s,
+                "experiment": exp.model_dump(mode="json") if exp else None,
             })
 
         # Broadcast pipeline-level completion

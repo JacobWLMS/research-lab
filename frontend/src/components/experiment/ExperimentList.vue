@@ -59,6 +59,20 @@ function stepCount(exp: Experiment): number {
   return exp.steps.length
 }
 
+function runningStepName(exp: Experiment): string | null {
+  const step = exp.steps.find(s => s.status === 'running')
+  return step ? (step.title || step.name) : null
+}
+
+function stepStatusColor(status: StepStatus): string {
+  switch (status) {
+    case 'completed': return 'var(--c-green)'
+    case 'running': return 'var(--c-yellow)'
+    case 'failed': return 'var(--c-red)'
+    default: return 'var(--c-fg-dim)'
+  }
+}
+
 function formatTime(iso: string): string {
   const d = new Date(iso)
   const now = new Date()
@@ -169,7 +183,6 @@ async function doDelete(id: string) {
     >
       <span class="exp-list__col-hdr" @click="setSort('status')">{{ sortArrow('status') }}</span>
       <span class="exp-list__col-hdr exp-list__col-hdr--name" @click="setSort('name')">Name {{ sortArrow('name') }}</span>
-      <span class="exp-list__col-hdr exp-list__col-hdr--count" @click="setSort('status')">St</span>
       <span class="exp-list__col-hdr exp-list__col-hdr--age" @click="setSort('updated_at')">
         Age {{ sortArrow('updated_at') }}
       </span>
@@ -186,10 +199,27 @@ async function doDelete(id: string) {
         @click="emit('select', exp.id)"
         @contextmenu.prevent="confirmDeleteId = confirmDeleteId === exp.id ? null : exp.id"
       >
-        <StatusBadge :status="overallStatus(exp)" :show-label="false" />
-        <span class="exp-list__item-name">{{ exp.name }}</span>
-        <span class="exp-list__item-steps">{{ stepCount(exp) }}</span>
-        <span class="exp-list__item-age">{{ formatTime(exp.updated_at) }}</span>
+        <div class="exp-list__item-top">
+          <StatusBadge :status="overallStatus(exp)" :show-label="false" />
+          <span class="exp-list__item-name">{{ exp.name }}</span>
+          <span class="exp-list__item-age">{{ formatTime(exp.updated_at) }}</span>
+        </div>
+        <!-- Mini pipeline dots + running step -->
+        <div v-if="exp.steps.length > 0" class="exp-list__item-pipeline">
+          <span class="exp-list__pipeline-dots">
+            <span
+              v-for="step in exp.steps"
+              :key="step.name"
+              class="exp-list__pipeline-dot"
+              :class="{ 'animate-pulse-glow': step.status === 'running' }"
+              :style="{ background: stepStatusColor(step.status) }"
+              :title="`${step.title || step.name}: ${step.status}`"
+            />
+          </span>
+          <span v-if="runningStepName(exp)" class="exp-list__running-step">
+            running: {{ runningStepName(exp) }}
+          </span>
+        </div>
 
         <!-- Delete confirmation overlay -->
         <div
@@ -339,7 +369,7 @@ async function doDelete(id: string) {
 /* Column headers */
 .exp-list__col-headers {
   display: grid;
-  grid-template-columns: 1.25rem 1fr 2rem 2.5rem;
+  grid-template-columns: 1.25rem 1fr 2.5rem;
   gap: 0.25rem;
   padding: 0.25rem 0.75rem;
   font-size: 0.625rem;
@@ -374,10 +404,9 @@ async function doDelete(id: string) {
 }
 
 .exp-list__item {
-  display: grid;
-  grid-template-columns: 1.25rem 1fr 2rem 2.5rem;
-  gap: 0.25rem;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
   padding: 0.375rem 0.75rem;
   font-size: 0.75rem;
   border-bottom: 1px solid var(--c-border-subtle);
@@ -399,23 +428,57 @@ async function doDelete(id: string) {
   background: var(--c-surface-active);
 }
 
+.exp-list__item-top {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
 .exp-list__item-name {
   color: var(--c-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.exp-list__item-steps {
-  font-family: var(--font-mono);
-  text-align: center;
-  color: var(--c-fg-muted);
+  flex: 1;
+  min-width: 0;
 }
 
 .exp-list__item-age {
   text-align: right;
   white-space: nowrap;
   color: var(--c-fg-dim);
+  flex-shrink: 0;
+}
+
+/* Mini pipeline dots */
+.exp-list__item-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 1.625rem; /* aligns with name after status badge */
+}
+
+.exp-list__pipeline-dots {
+  display: flex;
+  align-items: center;
+  gap: 0.1875rem;
+}
+
+.exp-list__pipeline-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.exp-list__running-step {
+  font-size: 0.625rem;
+  color: var(--c-yellow);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* Delete confirmation */

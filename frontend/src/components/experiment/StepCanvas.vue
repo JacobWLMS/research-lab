@@ -6,12 +6,14 @@ import type {
   StepResult,
   CanvasData,
   ImageWidgetData,
+  ChartWidget,
 } from '../../types'
 import { useRunHistory } from '../../composables/useRunHistory'
 import StatusBadge from '../shared/StatusBadge.vue'
 import StreamingOutput from '../shared/StreamingOutput.vue'
 import CodeBlock from '../shared/CodeBlock.vue'
 import MetricStrip from '../widgets/MetricStrip.vue'
+import PlotlyChart from '../widgets/PlotlyChart.vue'
 
 const props = defineProps<{
   step: Step
@@ -130,6 +132,18 @@ const summaryMetrics = computed<Record<string, number | string>>(() => {
 const runNumber = computed(() => activeResult.value?.run_number ?? 0)
 const isRerun = computed(() => runNumber.value > 1)
 
+// First chart widget from canvases (for inline preview)
+const firstChartWidget = computed<ChartWidget | null>(() => {
+  for (const canvas of activeCanvases.value) {
+    for (const widget of canvas.widgets) {
+      if (widget.kind === 'chart') {
+        return widget as ChartWidget
+      }
+    }
+  }
+  return null
+})
+
 // Image thumbnails from canvases
 const imageThumbnails = computed(() => {
   const images: { canvasName: string; title: string; src: string }[] = []
@@ -245,18 +259,8 @@ function openCanvasReport() {
         <span v-else-if="isRerun && !isRunning" class="step-card__rerun-badge">Run #{{ runNumber }}</span>
       </div>
 
-      <!-- Right: disclosures + actions -->
+      <!-- Right: only Logs toggle in header -->
       <div class="step-card__header-right">
-        <button
-          class="step-card__toggle"
-          :class="{ 'step-card__toggle--active': showCode }"
-          @click="showCode = !showCode"
-        >
-          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
-            <path :d="showCode ? 'M7 10l5 5 5-5z' : 'M10 17l5-5-5-5z'"/>
-          </svg>
-          Code
-        </button>
         <button
           class="step-card__toggle"
           :class="{ 'step-card__toggle--active': showLogs }"
@@ -268,15 +272,6 @@ function openCanvasReport() {
           Logs
         </button>
       </div>
-    </div>
-
-    <!-- Code block (collapsible) -->
-    <div v-if="showCode" class="step-card__code animate-slide-up">
-      <CodeBlock
-        :code="step.code"
-        :editable="!isRunning"
-        @update:code="(code: string) => emit('updateCode', code)"
-      />
     </div>
 
     <!-- Step description -->
@@ -380,7 +375,16 @@ function openCanvasReport() {
       </div>
     </div>
 
-    <!-- Image thumbnails row -->
+    <!-- Inline canvas preview: show first chart at compact size -->
+    <div
+      v-if="hasCanvases && firstChartWidget"
+      class="step-card__inline-preview"
+      @click="openCanvasReport"
+    >
+      <PlotlyChart :plotly-json="firstChartWidget.plotly_json" :title="firstChartWidget.title" />
+    </div>
+
+    <!-- Image thumbnails row (larger thumbnails) -->
     <div v-if="imageThumbnails.length > 0" class="step-card__thumbnails" @click="openCanvasReport">
       <img
         v-for="(img, idx) in imageThumbnails"
@@ -389,6 +393,30 @@ function openCanvasReport() {
         :alt="img.title"
         :title="img.title"
         class="step-card__thumbnail"
+      />
+    </div>
+
+    <!-- Code toggle link at bottom of card -->
+    <div class="step-card__code-toggle-row">
+      <button
+        class="step-card__code-link"
+        :class="{ 'step-card__code-link--active': showCode }"
+        @click="showCode = !showCode"
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 18 22 12 16 6" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="8 6 2 12 8 18" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        {{ showCode ? 'Hide Code' : 'Show Code' }}
+      </button>
+    </div>
+
+    <!-- Code block (collapsible, at bottom) -->
+    <div v-if="showCode" class="step-card__code step-card__code--bottom animate-slide-up">
+      <CodeBlock
+        :code="step.code"
+        :editable="!isRunning"
+        @update:code="(code: string) => emit('updateCode', code)"
       />
     </div>
 
@@ -753,11 +781,31 @@ function openCanvasReport() {
   white-space: nowrap;
 }
 
-/* Image thumbnails */
+/* Inline canvas preview */
+.step-card__inline-preview {
+  border-top: 1px solid var(--c-border-subtle);
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  max-height: 12.5rem;
+  overflow: hidden;
+  position: relative;
+  transition: background 0.12s;
+}
+
+.step-card__inline-preview:hover {
+  background: var(--c-surface-hover);
+}
+
+.step-card__inline-preview :deep(.w-full) {
+  min-height: auto !important;
+  height: 12.5rem !important;
+}
+
+/* Image thumbnails (larger: 64px) */
 .step-card__thumbnails {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   border-top: 1px solid var(--c-border-subtle);
   overflow-x: auto;
@@ -765,8 +813,8 @@ function openCanvasReport() {
 }
 
 .step-card__thumbnail {
-  height: 3rem;
-  max-width: 6rem;
+  height: 4rem;
+  max-width: 8rem;
   object-fit: cover;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
@@ -777,6 +825,41 @@ function openCanvasReport() {
 .step-card__thumbnail:hover {
   border-color: var(--c-aqua);
   opacity: 0.85;
+}
+
+/* Code toggle link at bottom */
+.step-card__code-toggle-row {
+  display: flex;
+  padding: 0.25rem 0.75rem 0.375rem;
+  border-top: 1px solid var(--c-border-subtle);
+}
+
+.step-card__code-link {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--c-fg-dim);
+  background: transparent;
+  border: none;
+  padding: 0.125rem 0.25rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.step-card__code-link:hover {
+  color: var(--c-fg-muted);
+  background: var(--c-surface-hover);
+}
+
+.step-card__code-link--active {
+  color: var(--c-aqua);
+}
+
+/* Code block at bottom variant */
+.step-card__code--bottom {
+  border-top: 1px solid var(--c-border-subtle);
 }
 
 /* Error block with red border */

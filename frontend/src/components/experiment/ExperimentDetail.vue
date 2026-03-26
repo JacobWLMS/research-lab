@@ -7,6 +7,7 @@ import type { AssetsResponse } from '../../types'
 import PipelineBar from './PipelineBar.vue'
 import StepCanvas from './StepCanvas.vue'
 import TerminalPanel from '../shared/TerminalPanel.vue'
+import ActivityFeed from '../shared/ActivityFeed.vue'
 
 const props = defineProps<{
   id?: string
@@ -196,13 +197,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- No experiment selected -->
+  <!-- No experiment selected: show activity feed -->
   <div v-if="!experimentId" class="detail-empty">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--c-fg-dim)">
-      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <p class="detail-empty__title">Select an experiment</p>
-    <p class="detail-empty__subtitle">Or create one from the sidebar</p>
+    <ActivityFeed />
   </div>
 
   <!-- Loading -->

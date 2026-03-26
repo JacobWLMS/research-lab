@@ -125,6 +125,7 @@ export interface WsStepCompleted {
   step_name: string
   status: 'completed' | 'failed'
   duration_s: number
+  experiment?: Experiment
 }
 
 export interface WsMetricsLive {
@@ -193,6 +194,25 @@ export interface WsExperimentDeleted {
   experiment_id: string
 }
 
+export interface WsStepUpdated {
+  type: 'step_updated'
+  experiment_id: string
+  step_name: string
+  experiment: Experiment
+}
+
+export interface WsStepDeleted {
+  type: 'step_deleted'
+  experiment_id: string
+  step_name: string
+}
+
+export interface WsExperimentUpdated {
+  type: 'experiment_updated'
+  experiment_id: string
+  experiment: Experiment
+}
+
 export type WsMessage =
   | WsStepStarted
   | WsStdout
@@ -207,6 +227,9 @@ export type WsMessage =
   | WsExperimentCreated
   | WsStepAdded
   | WsExperimentDeleted
+  | WsStepUpdated
+  | WsStepDeleted
+  | WsExperimentUpdated
 
 // ---------------------------------------------------------------------------
 // API response helpers
