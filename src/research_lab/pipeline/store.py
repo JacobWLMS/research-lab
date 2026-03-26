@@ -183,19 +183,167 @@ class ExperimentStore:
             return 1
         existing = [
             f for f in results_dir.glob(f"{step_name}_*.json")
-            if not f.stem.endswith("_canvases")
+            if "_canvases" not in f.stem
         ]
         return len(existing) + 1
+
+    # ------------------------------------------------------------------
+    # Run history
+    # ------------------------------------------------------------------
+
+    def list_runs(self, experiment_id: str, step_name: str) -> list[dict]:
+        """Return summary dicts for every historical run of *step_name*.
+
+        Each dict contains lightweight metadata (no stdout/images) and is
+        sorted by ``run_number`` descending (most recent first).
+        """
+        results_dir = self._exp_dir(experiment_id) / "results"
+        if not results_dir.exists():
+            return []
+
+        summaries: list[dict] = []
+        # Collect numbered result files: {step_name}_NNN.json
+        # Exclude canvas files (_canvases_NNN.json)
+        for f in results_dir.glob(f"{step_name}_*.json"):
+            if "_canvases" in f.stem:
+                continue
+            try:
+                r = StepResult.model_validate_json(f.read_text())
+            except Exception:
+                continue
+            # Check for matching canvas file
+            canvas_path = results_dir / f"{step_name}_canvases_{r.run_number:03d}.json"
+            has_canvases = canvas_path.exists()
+            # Fall back to latest canvas file for the most recent run
+            if not has_canvases:
+                latest_canvas = results_dir / f"{step_name}_canvases.json"
+                latest_result = results_dir / f"{step_name}.json"
+                if latest_canvas.exists() and latest_result.exists():
+                    try:
+                        lr = StepResult.model_validate_json(latest_result.read_text())
+                        if lr.run_number == r.run_number:
+                            has_canvases = True
+                    except Exception:
+                        pass
+
+            has_images = len(r.images) > 0
+            if not has_images and has_canvases:
+                # Check canvas data for image widgets
+                canvases = self.get_run_canvases(experiment_id, step_name, r.run_number)
+                for c in canvases:
+                    for w in c.get("widgets", []):
+                        if w.get("kind") == "image" and w.get("data"):
+                            has_images = True
+                            break
+                    if has_images:
+                        break
+
+            summaries.append({
+                "run_number": r.run_number,
+                "status": r.status,
+                "started_at": r.started_at.isoformat(),
+                "completed_at": r.completed_at.isoformat(),
+                "execution_time_s": r.execution_time_s,
+                "metrics": {
+                    k: v for k, v in r.metrics.items()
+                    if not str(k).startswith("_")
+                },
+                "has_canvases": has_canvases,
+                "has_images": has_images,
+            })
+
+        summaries.sort(key=lambda s: s["run_number"], reverse=True)
+        return summaries
+
+    def get_run_result(
+        self, experiment_id: str, step_name: str, run_number: int
+    ) -> StepResult | None:
+        """Load a specific historical result for *step_name*.
+
+        If *run_number* matches the latest run, reads ``{step_name}.json``.
+        Otherwise reads ``{step_name}_{run_number:03d}.json``.
+        """
+        results_dir = self._exp_dir(experiment_id) / "results"
+        if not results_dir.exists():
+            return None
+
+        # Try the numbered file first
+        hist = results_dir / f"{step_name}_{run_number:03d}.json"
+        if hist.exists():
+            try:
+                return StepResult.model_validate_json(hist.read_text())
+            except Exception:
+                return None
+
+        # Fall back to latest if it matches the requested run_number
+        latest = results_dir / f"{step_name}.json"
+        if latest.exists():
+            try:
+                r = StepResult.model_validate_json(latest.read_text())
+                if r.run_number == run_number:
+                    return r
+            except Exception:
+                pass
+        return None
+
+    def get_run_canvases(
+        self, experiment_id: str, step_name: str, run_number: int
+    ) -> list[dict]:
+        """Load canvas data for a specific run of *step_name*.
+
+        Tries ``{step_name}_canvases_{run_number:03d}.json`` first, then
+        falls back to the latest canvas file if the latest result matches.
+        """
+        results_dir = self._exp_dir(experiment_id) / "results"
+        if not results_dir.exists():
+            return []
+
+        # Try numbered canvas file
+        hist = results_dir / f"{step_name}_canvases_{run_number:03d}.json"
+        if hist.exists():
+            try:
+                return json.loads(hist.read_text())
+            except Exception:
+                return []
+
+        # Fall back to latest canvas if the latest result matches this run
+        latest_canvas = results_dir / f"{step_name}_canvases.json"
+        latest_result = results_dir / f"{step_name}.json"
+        if latest_canvas.exists() and latest_result.exists():
+            try:
+                r = StepResult.model_validate_json(latest_result.read_text())
+                if r.run_number == run_number:
+                    return json.loads(latest_canvas.read_text())
+            except Exception:
+                pass
+        return []
 
     # ------------------------------------------------------------------
     # Canvas persistence
     # ------------------------------------------------------------------
 
-    def save_canvases(self, experiment_id: str, step_name: str, canvases: list[dict]) -> None:
-        """Write canvas data for a step to disk."""
+    def save_canvases(
+        self,
+        experiment_id: str,
+        step_name: str,
+        canvases: list[dict],
+        run_number: int | None = None,
+    ) -> None:
+        """Write canvas data for a step to disk.
+
+        Always writes the latest file ``{step_name}_canvases.json``.  When
+        *run_number* is provided, also writes a historical copy
+        ``{step_name}_canvases_{run_number:03d}.json``.
+        """
         results_dir = self._results_dir(experiment_id)
-        path = results_dir / f"{step_name}_canvases.json"
-        path.write_text(json.dumps(canvases, indent=2))
+        # Latest (always overwritten)
+        latest = results_dir / f"{step_name}_canvases.json"
+        payload = json.dumps(canvases, indent=2)
+        latest.write_text(payload)
+        # Historical copy
+        if run_number is not None:
+            hist = results_dir / f"{step_name}_canvases_{run_number:03d}.json"
+            hist.write_text(payload)
 
     def get_canvases(self, experiment_id: str, step_name: str) -> list[dict]:
         """Load canvas data for a step from disk."""
@@ -257,6 +405,7 @@ class ExperimentStore:
             for img in result.images:
                 images.append({
                     "step_name": step_name,
+                    "run_number": result.run_number,
                     "source": "result",
                     "canvas_name": None,
                     "title": img.label or f"Image {global_idx}",
@@ -277,10 +426,11 @@ class ExperimentStore:
                     if widget.get("kind") == "image" and widget.get("data"):
                         # Skip placeholder / non-base64 data
                         data_str = widget["data"]
-                        if len(data_str) < 100 or data_str.startswith("["):
+                        if len(data_str) < 20 or data_str.startswith("["):
                             continue
                         images.append({
                             "step_name": step_name,
+                            "run_number": result.run_number,
                             "source": "canvas",
                             "canvas_name": canvas_name,
                             "title": widget.get("title") or f"Image {global_idx}",

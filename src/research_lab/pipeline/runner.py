@@ -296,7 +296,7 @@ class PipelineRunner:
 
         # Persist and broadcast canvas data
         if canvases:
-            self._store.save_canvases(experiment_id, step_name, canvases)
+            self._store.save_canvases(experiment_id, step_name, canvases, run_number=run_number)
             for canvas_data in canvases:
                 await self._emit_canvas(
                     experiment_id,

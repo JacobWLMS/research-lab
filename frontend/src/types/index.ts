@@ -240,6 +240,7 @@ export interface TerminalEntry {
 
 export interface AssetImage {
   step_name: string
+  run_number?: number
   source: 'canvas' | 'result' | 'artifact'
   canvas_name: string | null
   title: string
@@ -259,6 +260,31 @@ export interface AssetArtifact {
 export interface AssetsResponse {
   images: AssetImage[]
   artifacts: AssetArtifact[]
+}
+
+// ---------------------------------------------------------------------------
+// Run history types
+// ---------------------------------------------------------------------------
+
+export interface RunSummary {
+  run_number: number
+  status: 'completed' | 'failed'
+  started_at: string
+  completed_at: string
+  execution_time_s: number
+  metrics: Record<string, number | string>
+  has_canvases: boolean
+  has_images: boolean
+}
+
+export interface RunHistoryResponse {
+  step_name: string
+  runs: RunSummary[]
+}
+
+export interface RunDetailResponse {
+  result: StepResult
+  canvases: Array<{ canvas_name?: string; name?: string; widgets: CanvasWidget[] }>
 }
 
 // ---------------------------------------------------------------------------

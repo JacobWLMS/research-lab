@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { AssetImage, AssetArtifact, AssetsResponse } from '../../types'
+import type { AssetImage, AssetArtifact, AssetsResponse, RunSummary } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,7 +14,11 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const ready = ref(false)
 const filterStep = ref<string>('')
+const filterRun = ref<number | 0>(0) // 0 = all runs
 const lightboxIndex = ref<number | null>(null)
+
+// Run history per step for the run filter dropdown
+const stepRuns = ref<Record<string, RunSummary[]>>({})
 
 // Unique step names for the filter dropdown
 const stepNames = computed(() => {
@@ -24,9 +28,21 @@ const stepNames = computed(() => {
   return Array.from(names).sort()
 })
 
+// Available runs for the currently selected step
+const availableRuns = computed<RunSummary[]>(() => {
+  if (!filterStep.value) return []
+  return stepRuns.value[filterStep.value] ?? []
+})
+
 const filteredImages = computed(() => {
-  if (!filterStep.value) return images.value
-  return images.value.filter((img) => img.step_name === filterStep.value)
+  let imgs = images.value
+  if (filterStep.value) {
+    imgs = imgs.filter((img) => img.step_name === filterStep.value)
+  }
+  if (filterRun.value > 0 && filterStep.value) {
+    imgs = imgs.filter((img) => img.run_number === filterRun.value)
+  }
+  return imgs
 })
 
 const filteredArtifacts = computed(() => {
@@ -83,6 +99,27 @@ async function fetchAssets() {
     const data: AssetsResponse = await res.json()
     images.value = data.images
     artifacts.value = data.artifacts
+
+    // Fetch run history per step for the run filter
+    const uniqueSteps = new Set<string>()
+    for (const img of data.images) uniqueSteps.add(img.step_name)
+    const runMap: Record<string, RunSummary[]> = {}
+    for (const stepName of uniqueSteps) {
+      try {
+        const hRes = await fetch(
+          `/api/experiments/${experimentId.value}/steps/${encodeURIComponent(stepName)}/history`,
+        )
+        if (hRes.ok) {
+          const hData = await hRes.json()
+          if (hData.runs && hData.runs.length > 1) {
+            runMap[stepName] = hData.runs
+          }
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+    stepRuns.value = runMap
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -174,9 +211,24 @@ watch(experimentId, () => {
           v-if="stepNames.length > 1"
           v-model="filterStep"
           class="asset-library__filter"
+          @change="filterRun = 0"
         >
           <option value="">All steps</option>
           <option v-for="name in stepNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+
+        <!-- Run filter (only when a step with multiple runs is selected) -->
+        <select
+          v-if="availableRuns.length > 0"
+          v-model.number="filterRun"
+          class="asset-library__filter"
+        >
+          <option :value="0">All runs</option>
+          <option
+            v-for="run in availableRuns"
+            :key="run.run_number"
+            :value="run.run_number"
+          >Run #{{ run.run_number }}</option>
         </select>
 
         <!-- Download All -->

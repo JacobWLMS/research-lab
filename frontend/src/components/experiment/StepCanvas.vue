@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type {
   Step,
@@ -7,6 +7,7 @@ import type {
   CanvasData,
   ImageWidgetData,
 } from '../../types'
+import { useRunHistory } from '../../composables/useRunHistory'
 import StatusBadge from '../shared/StatusBadge.vue'
 import StreamingOutput from '../shared/StreamingOutput.vue'
 import CodeBlock from '../shared/CodeBlock.vue'
@@ -32,15 +33,73 @@ const route = useRoute()
 const showCode = ref(false)
 const showLogs = ref(false)
 
+const experimentId = computed(() => {
+  return (route.params.id as string) ?? ''
+})
+
+// --- Run history ---
+const {
+  runs,
+  selectedRun,
+  runResult: historyResult,
+  runCanvases: historyCanvases,
+  isViewingOldRun,
+  fetchHistory,
+  selectRun,
+} = useRunHistory(
+  () => experimentId.value || null,
+  () => props.step.name,
+)
+
+// Fetch history when the result changes (i.e. a step just completed)
+watch(
+  () => props.result?.run_number,
+  () => {
+    if (experimentId.value && props.result) {
+      fetchHistory()
+      // Reset to latest when a new run completes
+      selectedRun.value = null
+    }
+  },
+  { immediate: true },
+)
+
+// Active result/canvases: use history override when viewing an old run
+const activeResult = computed<StepResult | undefined>(() => {
+  if (selectedRun.value !== null && historyResult.value) {
+    return historyResult.value
+  }
+  return props.result
+})
+
+const activeCanvases = computed<CanvasData[]>(() => {
+  if (selectedRun.value !== null && historyCanvases.value.length > 0) {
+    return historyCanvases.value
+  }
+  return props.canvases
+})
+
+const hasMultipleRuns = computed(() => runs.value.length > 1)
+
+function onRunSelect(e: Event) {
+  const val = (e.target as HTMLSelectElement).value
+  if (val === 'latest') {
+    selectRun(null)
+  } else {
+    selectRun(Number(val))
+  }
+}
+// --- End run history ---
+
 const isRunning = computed(() => props.step.status === 'running')
 
 const hasCanvases = computed(() => {
-  return props.canvases.length > 0 &&
-    props.canvases.some((c) => c.widgets.length > 0)
+  return activeCanvases.value.length > 0 &&
+    activeCanvases.value.some((c) => c.widgets.length > 0)
 })
 
 const canvasWidgetCount = computed(() => {
-  return props.canvases.reduce((sum, c) => sum + c.widgets.length, 0)
+  return activeCanvases.value.reduce((sum, c) => sum + c.widgets.length, 0)
 })
 
 const progressPct = computed(() => {
@@ -57,27 +116,24 @@ const hasOutput = computed(() => {
 // Combine result metrics + live metrics for the summary chips
 const summaryMetrics = computed<Record<string, number | string>>(() => {
   const m: Record<string, number | string> = {}
-  if (props.result && props.result.metrics) {
-    Object.assign(m, props.result.metrics)
+  if (activeResult.value && activeResult.value.metrics) {
+    Object.assign(m, activeResult.value.metrics)
   }
-  if (props.liveMetrics) {
+  // Only show live metrics when viewing the latest run
+  if (!isViewingOldRun.value && props.liveMetrics) {
     Object.assign(m, props.liveMetrics)
   }
   return m
 })
 
-const experimentId = computed(() => {
-  return (route.params.id as string) ?? ''
-})
-
 // Re-run indicator: show badge when run_number > 1
-const runNumber = computed(() => props.result?.run_number ?? 0)
+const runNumber = computed(() => activeResult.value?.run_number ?? 0)
 const isRerun = computed(() => runNumber.value > 1)
 
 // Image thumbnails from canvases
 const imageThumbnails = computed(() => {
   const images: { canvasName: string; title: string; src: string }[] = []
-  for (const canvas of props.canvases) {
+  for (const canvas of activeCanvases.value) {
     for (const widget of canvas.widgets) {
       if (widget.kind === 'image') {
         const img = widget as ImageWidgetData
@@ -137,12 +193,17 @@ function formatTraceback(text: string): string {
 
 function openCanvasReport() {
   if (!experimentId.value) return
+  const query: Record<string, string> = {}
+  if (selectedRun.value !== null) {
+    query.run = String(selectedRun.value)
+  }
   router.push({
     name: 'canvas-report',
     params: {
       experimentId: experimentId.value,
       stepName: props.step.name,
     },
+    query,
   })
 }
 </script>
@@ -158,11 +219,28 @@ function openCanvasReport() {
   >
     <!-- Step header bar -->
     <div class="step-card__header">
-      <!-- Left: status, name, duration, re-run badge -->
+      <!-- Left: status, name, duration, run selector -->
       <div class="step-card__header-left">
         <StatusBadge :status="step.status" />
-        <span v-if="result && !isRunning" class="step-card__duration">{{ fmtDur(result.execution_time_s) }}</span>
-        <span v-if="isRerun && !isRunning" class="step-card__rerun-badge">Run #{{ runNumber }}</span>
+        <span v-if="activeResult && !isRunning" class="step-card__duration">{{ fmtDur(activeResult.execution_time_s) }}</span>
+        <!-- Run history dropdown -->
+        <select
+          v-if="hasMultipleRuns && !isRunning"
+          class="step-card__run-select"
+          :value="selectedRun === null ? 'latest' : String(selectedRun)"
+          @change="onRunSelect"
+        >
+          <option
+            v-for="run in runs"
+            :key="run.run_number"
+            :value="run.run_number === runs[0].run_number ? 'latest' : String(run.run_number)"
+          >
+            Run #{{ run.run_number }}{{ run.run_number === runs[0].run_number ? ' (latest)' : '' }}
+            {{ run.status === 'failed' ? ' [failed]' : '' }}
+          </option>
+        </select>
+        <!-- Single run badge (only one run, no dropdown needed) -->
+        <span v-else-if="isRerun && !isRunning" class="step-card__rerun-badge">Run #{{ runNumber }}</span>
       </div>
 
       <!-- Right: disclosures + actions -->
@@ -199,6 +277,16 @@ function openCanvasReport() {
       />
     </div>
 
+    <!-- Old run banner -->
+    <div v-if="isViewingOldRun" class="step-card__old-run-banner">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      Viewing Run #{{ selectedRun }} (not latest)
+      <button class="step-card__old-run-dismiss" @click="selectRun(null)">View latest</button>
+    </div>
+
     <!-- Step body -->
     <div class="step-card__body">
       <!-- Metrics summary chips -->
@@ -224,7 +312,7 @@ function openCanvasReport() {
       </div>
 
       <!-- Streaming output (compact, only when running or has output) -->
-      <div v-if="hasOutput || isRunning || !!result">
+      <div v-if="hasOutput || isRunning || !!activeResult">
         <StreamingOutput :lines="outputLines" />
       </div>
 
@@ -301,14 +389,14 @@ function openCanvasReport() {
 
     <!-- Logs panel (collapsible) -->
     <div v-if="showLogs" class="step-card__logs animate-slide-up">
-      <template v-if="result">
+      <template v-if="activeResult">
         <div class="step-card__logs-label">Full Output</div>
-        <StreamingOutput :lines="result.stdout ? result.stdout.split('\n') : []" />
-        <div v-if="result.stderr" class="step-card__logs-section">
+        <StreamingOutput :lines="activeResult.stdout ? activeResult.stdout.split('\n') : []" />
+        <div v-if="activeResult.stderr" class="step-card__logs-section">
           <div class="step-card__logs-label step-card__logs-label--error">Stderr</div>
-          <StreamingOutput :lines="result.stderr.split('\n')" />
+          <StreamingOutput :lines="activeResult.stderr.split('\n')" />
         </div>
-        <div v-if="result.error" class="step-card__error-block">
+        <div v-if="activeResult.error" class="step-card__error-block">
           <div class="step-card__error-block-header">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
@@ -316,7 +404,7 @@ function openCanvasReport() {
             </svg>
             Error
           </div>
-          <pre class="step-card__error-traceback" v-html="formatTraceback(result.error)" />
+          <pre class="step-card__error-traceback" v-html="formatTraceback(activeResult.error)" />
         </div>
       </template>
       <div v-else class="step-card__logs-empty">No logs available</div>
@@ -572,6 +660,59 @@ function openCanvasReport() {
 
 .step-card__logs-section {
   margin-top: 0.5rem;
+}
+
+/* Run history dropdown */
+.step-card__run-select {
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 0.0625rem 0.375rem;
+  background: var(--c-bg2);
+  color: var(--c-fg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+  appearance: auto;
+  max-width: 10rem;
+}
+
+.step-card__run-select:focus {
+  border-color: var(--c-aqua);
+}
+
+.step-card__run-select:hover {
+  background: var(--c-bg3);
+}
+
+/* Old run banner */
+.step-card__old-run-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.6875rem;
+  color: var(--c-yellow);
+  background: color-mix(in srgb, var(--c-yellow) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-yellow) 20%, transparent);
+}
+
+.step-card__old-run-dismiss {
+  margin-left: auto;
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 0.0625rem 0.375rem;
+  color: var(--c-aqua);
+  background: transparent;
+  border: 1px solid var(--c-aqua);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.step-card__old-run-dismiss:hover {
+  background: color-mix(in srgb, var(--c-aqua) 12%, transparent);
 }
 
 /* Re-run badge */

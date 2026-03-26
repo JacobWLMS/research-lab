@@ -105,6 +105,44 @@ async def delete_step(
     return exp
 
 
+@router.get("/{step_name}/history")
+async def get_step_history(
+    experiment_id: str, step_name: str, request: Request
+) -> dict:
+    """Return summary metadata for every run of a step (lightweight, no stdout/images)."""
+    store = request.app.state.store
+    exp = store.get(experiment_id)
+    if exp is None:
+        raise HTTPException(404, f"Experiment {experiment_id!r} not found")
+    step = next((s for s in exp.steps if s.name == step_name), None)
+    if step is None:
+        raise HTTPException(404, f"Step {step_name!r} not found")
+    runs = store.list_runs(experiment_id, step_name)
+    return {"step_name": step_name, "runs": runs}
+
+
+@router.get("/{step_name}/runs/{run_number}")
+async def get_step_run(
+    experiment_id: str, step_name: str, run_number: int, request: Request
+) -> dict:
+    """Return the full result + canvases for a specific historical run."""
+    store = request.app.state.store
+    exp = store.get(experiment_id)
+    if exp is None:
+        raise HTTPException(404, f"Experiment {experiment_id!r} not found")
+    step = next((s for s in exp.steps if s.name == step_name), None)
+    if step is None:
+        raise HTTPException(404, f"Step {step_name!r} not found")
+    result = store.get_run_result(experiment_id, step_name, run_number)
+    if result is None:
+        raise HTTPException(404, f"Run #{run_number} not found for step {step_name!r}")
+    canvases = store.get_run_canvases(experiment_id, step_name, run_number)
+    return {
+        "result": result.model_dump(mode="json"),
+        "canvases": canvases,
+    }
+
+
 def _make_on_chunk(mgr: ConnectionManager):
     """Create an on_chunk async callback that broadcasts via WebSocket."""
 

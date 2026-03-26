@@ -25,6 +25,10 @@ const { subscribe } = useWebSocket()
 
 const experimentId = computed(() => route.params.experimentId as string)
 const stepName = computed(() => route.params.stepName as string)
+const runNumber = computed(() => {
+  const r = route.query.run
+  return r ? Number(r) : null
+})
 
 const step = ref<Step | null>(null)
 const result = ref<StepResult | null>(null)
@@ -33,6 +37,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const activeCanvasIdx = ref(0)
 const ready = ref(false)
+const viewingOldRun = ref(false)
 
 const activeCanvas = computed<CanvasData | null>(() => {
   if (canvases.value.length === 0) return null
@@ -56,20 +61,43 @@ function isText(w: CanvasWidget): w is TextWidget { return w.kind === 'text' }
 async function fetchStepData() {
   loading.value = true
   error.value = null
+  viewingOldRun.value = false
   try {
-    const res = await fetch(`/api/experiments/${experimentId.value}/steps/${stepName.value}`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    step.value = data.step
-    result.value = data.result ?? null
+    // Always fetch step metadata
+    const stepRes = await fetch(`/api/experiments/${experimentId.value}/steps/${stepName.value}`)
+    if (!stepRes.ok) throw new Error(`HTTP ${stepRes.status}`)
+    const stepData = await stepRes.json()
+    step.value = stepData.step
 
-    // Canvases come from top-level or nested in result
-    const rawCanvases: Array<{ canvas_name?: string; name?: string; widgets: CanvasWidget[] }> =
-      data.canvases ?? data.result?.canvases ?? []
-    canvases.value = rawCanvases.map((c) => ({
-      name: c.canvas_name ?? c.name ?? 'Canvas',
-      widgets: c.widgets ?? [],
-    }))
+    // If a specific run was requested, fetch that run's data
+    if (runNumber.value !== null) {
+      const runRes = await fetch(
+        `/api/experiments/${experimentId.value}/steps/${stepName.value}/runs/${runNumber.value}`,
+      )
+      if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`)
+      const runData = await runRes.json()
+      result.value = runData.result ?? null
+      const rawCanvases: Array<{ canvas_name?: string; name?: string; widgets: CanvasWidget[] }> =
+        runData.canvases ?? []
+      canvases.value = rawCanvases.map((c) => ({
+        name: c.canvas_name ?? c.name ?? 'Canvas',
+        widgets: c.widgets ?? [],
+      }))
+      // Determine if this is an old run
+      const latestResult = stepData.result
+      if (latestResult && latestResult.run_number !== runNumber.value) {
+        viewingOldRun.value = true
+      }
+    } else {
+      // Default: use latest data
+      result.value = stepData.result ?? null
+      const rawCanvases: Array<{ canvas_name?: string; name?: string; widgets: CanvasWidget[] }> =
+        stepData.canvases ?? stepData.result?.canvases ?? []
+      canvases.value = rawCanvases.map((c) => ({
+        name: c.canvas_name ?? c.name ?? 'Canvas',
+        widgets: c.widgets ?? [],
+      }))
+    }
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -114,7 +142,7 @@ onUnmounted(() => {
   unsubscribe()
 })
 
-watch([experimentId, stepName], () => {
+watch([experimentId, stepName, runNumber], () => {
   fetchStepData()
 })
 </script>
@@ -151,6 +179,15 @@ watch([experimentId, stepName], () => {
         <span class="canvas-report__hint">Esc to close</span>
       </div>
     </header>
+
+    <!-- Old run banner -->
+    <div v-if="viewingOldRun" class="canvas-report__old-run-banner">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      Viewing Run #{{ runNumber }} (not latest)
+    </div>
 
     <!-- Loading state -->
     <div v-if="loading" class="canvas-report__state">
@@ -320,6 +357,19 @@ watch([experimentId, stepName], () => {
   padding: 0.125rem 0.5rem;
   background: var(--c-bg1);
   border-radius: var(--radius-sm);
+}
+
+/* ---- Old run banner ---- */
+.canvas-report__old-run-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 1rem;
+  font-size: 0.75rem;
+  color: var(--c-yellow);
+  background: color-mix(in srgb, var(--c-yellow) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-yellow) 20%, transparent);
+  flex-shrink: 0;
 }
 
 /* ---- Tabs ---- */
