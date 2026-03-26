@@ -76,8 +76,14 @@ class JupyterKernel:
     # KernelBackend interface
     # ------------------------------------------------------------------
 
-    async def execute(self, code: str) -> AsyncIterator[OutputChunk]:
-        """Execute *code* and yield OutputChunks from IOPub messages."""
+    async def execute(
+        self, code: str, *, msg_timeout: float = 300
+    ) -> AsyncIterator[OutputChunk]:
+        """Execute *code* and yield OutputChunks from IOPub messages.
+
+        *msg_timeout* controls how long to wait for each individual IOPub
+        message (default 300 s).
+        """
         if self._kc is None:
             raise RuntimeError("Kernel not started -- call start() first")
 
@@ -87,10 +93,10 @@ class JupyterKernel:
             try:
                 msg = await asyncio.wait_for(
                     self._kc.get_iopub_msg(),
-                    timeout=300,  # 5 min max per message wait
+                    timeout=msg_timeout,
                 )
             except asyncio.TimeoutError:
-                yield OutputChunk(kind="error", text="Kernel message timeout (300 s)")
+                yield OutputChunk(kind="error", text=f"Kernel message timeout ({msg_timeout} s)")
                 return
 
             # Only process messages belonging to our execution

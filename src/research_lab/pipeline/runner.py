@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections import defaultdict, deque
@@ -19,6 +20,8 @@ from research_lab.schemas import (
     StepResult,
     StepStatus,
 )
+
+_PROGRESS_SENTINEL = "__RL_PROGRESS__:"
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,7 @@ class PipelineRunner:
         *,
         on_chunk: Any | None = None,
         on_canvas: Any | None = None,
+        on_progress: Any | None = None,
     ) -> None:
         self._kernel = kernel
         self._store = store
@@ -77,6 +81,8 @@ class PipelineRunner:
         self._on_chunk = on_chunk
         # Optional async callback(experiment_id, step_name, canvas_name, widgets) for canvas updates
         self._on_canvas = on_canvas
+        # Optional async callback(experiment_id, step_name, current, total, message) for progress
+        self._on_progress = on_progress
 
     async def run_pipeline(self, experiment_id: str) -> list[StepResult]:
         """Run all steps in dependency order. Returns results."""
@@ -131,9 +137,73 @@ class PipelineRunner:
         # Save code snapshot
         self._store.save_code(experiment_id, step_name, step.code)
 
+        # Watchdog: configurable inactivity timeout
+        watchdog_seconds = step.config.get("watchdog_seconds", 300)
+        step_timeout = step.config.get("timeout_seconds", None)
+
         # Execute user code
         try:
+            last_activity = time.monotonic()
+            watchdog_warned = False
+
             async for chunk in self._kernel.execute(step.code):
+                now_mono = time.monotonic()
+
+                # Check step-level timeout
+                if step_timeout and (now_mono - t0) > step_timeout:
+                    error_text = f"Step timed out after {step_timeout}s"
+                    await self._emit(
+                        experiment_id, step_name,
+                        OutputChunk(kind="error", text=error_text),
+                    )
+                    # Interrupt the kernel to stop execution
+                    try:
+                        await self._kernel.interrupt()
+                    except Exception:
+                        pass
+                    break
+
+                # Watchdog: warn if no output for a long time
+                if not watchdog_warned and (now_mono - last_activity) > watchdog_seconds:
+                    warn_msg = f"WARNING: No output for {watchdog_seconds}s - step may be stuck\n"
+                    await self._emit(
+                        experiment_id, step_name,
+                        OutputChunk(kind="stderr", text=warn_msg),
+                    )
+                    stderr_parts.append(warn_msg)
+                    watchdog_warned = True
+
+                last_activity = now_mono
+
+                # Handle progress sentinel in stdout
+                if chunk.kind == "stdout" and _PROGRESS_SENTINEL in chunk.text:
+                    filtered_lines = []
+                    for line in chunk.text.splitlines(keepends=True):
+                        stripped = line.strip()
+                        if stripped.startswith(_PROGRESS_SENTINEL):
+                            # Parse progress JSON and broadcast
+                            try:
+                                payload = json.loads(stripped[len(_PROGRESS_SENTINEL):])
+                                await self._emit_progress(
+                                    experiment_id,
+                                    step_name,
+                                    payload.get("current", 0),
+                                    payload.get("total", 0),
+                                    payload.get("message", ""),
+                                )
+                            except (json.JSONDecodeError, Exception):
+                                # If parsing fails, keep the line as stdout
+                                filtered_lines.append(line)
+                        else:
+                            filtered_lines.append(line)
+                    # Only emit and capture the non-sentinel lines
+                    remaining = "".join(filtered_lines)
+                    if remaining:
+                        filtered_chunk = OutputChunk(kind="stdout", text=remaining)
+                        await self._emit(experiment_id, step_name, filtered_chunk)
+                        stdout_parts.append(remaining)
+                    continue
+
                 await self._emit(experiment_id, step_name, chunk)
                 if chunk.kind == "stdout":
                     stdout_parts.append(chunk.text)
@@ -154,6 +224,12 @@ class PipelineRunner:
 
         # Try to extract metrics from kernel namespace
         metrics = await self._extract_metrics(experiment_id, step_name)
+
+        # Extract GPU snapshots and merge into metrics
+        gpu_snapshots = await self._extract_gpu_snapshots(experiment_id, step_name)
+        if gpu_snapshots:
+            metrics["_gpu_snapshots"] = gpu_snapshots
+
         structured = await self._extract_structured(experiment_id, step_name)
 
         # Extract canvas data from kernel namespace
@@ -207,6 +283,29 @@ class PipelineRunner:
             except Exception:
                 logger.exception("on_chunk callback failed")
 
+    async def _emit_progress(
+        self, experiment_id: str, step_name: str, current: int, total: int, message: str
+    ) -> None:
+        if self._on_progress is not None:
+            try:
+                await self._on_progress(experiment_id, step_name, current, total, message)
+            except Exception:
+                logger.exception("on_progress callback failed")
+
+    async def _extract_gpu_snapshots(self, experiment_id: str, step_name: str) -> list[dict]:
+        """Pull ctx._gpu_snapshots from the kernel namespace."""
+        code = "import json as _j; print(_j.dumps(ctx._gpu_snapshots))"
+        text = ""
+        try:
+            async for chunk in self._kernel.execute(code):
+                if chunk.kind == "stdout":
+                    text += chunk.text
+            if text.strip():
+                return json.loads(text.strip())
+        except Exception:
+            pass
+        return []
+
     async def _extract_metrics(self, experiment_id: str, step_name: str) -> dict:
         """Pull ctx._metrics from the kernel namespace."""
         code = "import json as _j; print(_j.dumps(ctx._metrics))"
@@ -216,7 +315,6 @@ class PipelineRunner:
                 if chunk.kind == "stdout":
                     text += chunk.text
             if text.strip():
-                import json
                 return json.loads(text.strip())
         except Exception:
             pass
@@ -240,7 +338,6 @@ class PipelineRunner:
                 if chunk.kind == "stdout":
                     text += chunk.text
             if text.strip():
-                import json
                 return json.loads(text.strip())
         except Exception:
             logger.debug("Could not extract canvases for %s/%s", experiment_id, step_name)
@@ -256,7 +353,6 @@ class PipelineRunner:
                     text += chunk.text
             if not text.strip():
                 return {}
-            import json
             keys = json.loads(text.strip())
         except Exception:
             return {}
@@ -304,7 +400,13 @@ class _LabCanvas:
         import base64, io
         try:
             buf = io.BytesIO()
-            fig_or_data.savefig(buf, format="png", bbox_inches="tight")
+            # Check if it is a PIL Image (has .save and .mode)
+            if hasattr(fig_or_data, "save") and hasattr(fig_or_data, "mode"):
+                fig_or_data.save(buf, format="PNG")
+            elif hasattr(fig_or_data, "savefig"):
+                fig_or_data.savefig(buf, format="png", bbox_inches="tight")
+            else:
+                raise ValueError("Unknown image type")
             b64 = base64.b64encode(buf.getvalue()).decode()
             self._widgets.append({{"kind": "image", "title": title, "mime": mime, "data": b64}})
         except Exception:
@@ -321,12 +423,85 @@ class _LabContext:
         self._metrics = {{}}
         self._results = {{}}
         self._canvases = []
+        self._gpu_snapshots = []
     def log_metrics(self, **kwargs):
         self._metrics.update(kwargs)
     def save_result(self, name, value):
         self._results[name] = value
     def save_artifact(self, name, data, format="pt"):
-        pass  # Handled server-side
+        import os
+        art_dir = os.path.join(".research-lab", "experiments", self.experiment_id, "artifacts")
+        os.makedirs(art_dir, exist_ok=True)
+        path = os.path.join(art_dir, f"{{name}}.{{format}}")
+
+        if format == "pt":
+            import torch
+            torch.save(data, path)
+        elif format == "npy":
+            import numpy as np
+            np.save(path, data)
+        elif format == "safetensors":
+            from safetensors.torch import save_file
+            save_file(data, path)
+        elif format == "json":
+            import json
+            with open(path, "w") as f:
+                json.dump(data, f)
+        else:
+            with open(path, "wb") as f:
+                f.write(data if isinstance(data, bytes) else str(data).encode())
+
+        print(f"Artifact saved: {{path}}")
+        return path
+    def load_artifact(self, name, format=None):
+        import os, glob as _rlglob
+        art_dir = os.path.join(".research-lab", "experiments", self.experiment_id, "artifacts")
+        matches = _rlglob.glob(os.path.join(art_dir, f"{{name}}.*"))
+        if not matches:
+            raise FileNotFoundError(f"No artifact named '{{name}}' found in {{art_dir}}")
+        path = matches[0]
+        ext = os.path.splitext(path)[1]
+
+        if ext == ".pt":
+            import torch
+            return torch.load(path, weights_only=False)
+        elif ext == ".npy":
+            import numpy as np
+            return np.load(path)
+        elif ext == ".safetensors":
+            from safetensors.torch import load_file
+            return load_file(path)
+        elif ext == ".json":
+            import json
+            with open(path) as f:
+                return json.load(f)
+        else:
+            with open(path, "rb") as f:
+                return f.read()
+    def progress(self, current, total, message=""):
+        import json as _rlpjson
+        print(f"__RL_PROGRESS__:" + _rlpjson.dumps({{"current": current, "total": total, "message": message}}))
+    def gpu_snapshot(self, label=""):
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.used,memory.total,memory.free,utilization.gpu",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5
+            )
+            parts = result.stdout.strip().split(", ")
+            snapshot = {{
+                "label": label,
+                "memory_used_mb": int(parts[0]),
+                "memory_total_mb": int(parts[1]),
+                "memory_free_mb": int(parts[2]),
+                "gpu_util_pct": int(parts[3])
+            }}
+            self._gpu_snapshots.append(snapshot)
+            print(f"GPU: {{parts[0]}}MB / {{parts[1]}}MB used ({{parts[3]}}% util) [{{label}}]")
+            return snapshot
+        except Exception:
+            return None
     def log(self, msg):
         print(msg)
     def checkpoint(self):

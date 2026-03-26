@@ -251,6 +251,16 @@ class ResearchLabClient:
             f"/api/experiments/{experiment_id}/steps/{step_name}/stop"
         )
 
+    async def inspect_namespace(self, experiment_id: str) -> dict:
+        """Inspect the kernel namespace for an experiment.
+
+        Returns a mapping of variable names to info dicts with type, repr,
+        and optionally shape/len.
+        """
+        return await self._get(
+            f"/api/experiments/{experiment_id}/kernel/namespace"
+        )
+
     # ------------------------------------------------------------------
     # Ad-hoc execution
     # ------------------------------------------------------------------

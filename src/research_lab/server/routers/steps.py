@@ -11,7 +11,12 @@ from pydantic import BaseModel, Field
 
 from research_lab.pipeline.runner import PipelineRunner
 from research_lab.schemas import Experiment, OutputChunk, Step, StepResult
-from research_lab.server.ws import ConnectionManager, broadcast_canvas_update, broadcast_chunk
+from research_lab.server.ws import (
+    ConnectionManager,
+    broadcast_canvas_update,
+    broadcast_chunk,
+    broadcast_progress,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +120,17 @@ def _make_on_canvas(mgr: ConnectionManager):
     return on_canvas
 
 
+def _make_on_progress(mgr: ConnectionManager):
+    """Create an on_progress async callback that broadcasts progress via WebSocket."""
+
+    async def on_progress(
+        experiment_id: str, step_name: str, current: int, total: int, message: str
+    ) -> None:
+        await broadcast_progress(mgr, experiment_id, step_name, current, total, message)
+
+    return on_progress
+
+
 async def _run_step_background(
     experiment_id: str,
     step_name: str,
@@ -136,7 +152,11 @@ async def _run_step_background(
     try:
         kernel = await sessions.get_or_create(experiment_id)
         runner = PipelineRunner(
-            kernel, store, on_chunk=_make_on_chunk(mgr), on_canvas=_make_on_canvas(mgr)
+            kernel,
+            store,
+            on_chunk=_make_on_chunk(mgr),
+            on_canvas=_make_on_canvas(mgr),
+            on_progress=_make_on_progress(mgr),
         )
         result = await runner.run_step(experiment_id, step_name)
         elapsed = round(time.monotonic() - t0, 1)
@@ -191,3 +211,5 @@ async def stop_step(
         raise HTTPException(404, "No active kernel for this experiment")
     await kernel.interrupt()
     return {"status": "interrupted"}
+
+

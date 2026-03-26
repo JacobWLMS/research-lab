@@ -9,9 +9,11 @@ from research_lab.cli.commands import (
     exec_cmd,
     experiments_group,
     init_cmd,
+    inspect_cmd,
     results_cmd,
     server_group,
     status_cmd,
+    tail_cmd,
     upload_cmd,
 )
 
@@ -35,6 +37,8 @@ cli.add_command(server_group, "server")
 cli.add_command(experiments_group, "experiments")
 cli.add_command(upload_cmd, "upload")
 cli.add_command(download_cmd, "download")
+cli.add_command(inspect_cmd, "inspect")
+cli.add_command(tail_cmd, "tail")
 
 
 # Hidden mcp-server command

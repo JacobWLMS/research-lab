@@ -14,7 +14,12 @@ from pydantic import BaseModel, Field
 
 from research_lab.pipeline.runner import PipelineRunner
 from research_lab.schemas import Experiment, OutputChunk, Step, StepResult
-from research_lab.server.ws import ConnectionManager, broadcast_canvas_update, broadcast_chunk
+from research_lab.server.ws import (
+    ConnectionManager,
+    broadcast_canvas_update,
+    broadcast_chunk,
+    broadcast_progress,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +127,17 @@ def _make_on_canvas(mgr: ConnectionManager):
     return on_canvas
 
 
+def _make_on_progress(mgr: ConnectionManager):
+    """Create an on_progress async callback that broadcasts progress via WebSocket."""
+
+    async def on_progress(
+        experiment_id: str, step_name: str, current: int, total: int, message: str
+    ) -> None:
+        await broadcast_progress(mgr, experiment_id, step_name, current, total, message)
+
+    return on_progress
+
+
 async def _run_pipeline_background(
     experiment_id: str,
     request: Request,
@@ -139,7 +155,10 @@ async def _run_pipeline_background(
         kernel = await sessions.get_or_create(experiment_id)
         on_chunk = _make_on_chunk(mgr)
         on_canvas = _make_on_canvas(mgr)
-        runner = PipelineRunner(kernel, store, on_chunk=on_chunk, on_canvas=on_canvas)
+        on_progress = _make_on_progress(mgr)
+        runner = PipelineRunner(
+            kernel, store, on_chunk=on_chunk, on_canvas=on_canvas, on_progress=on_progress
+        )
 
         # Run each step with lifecycle broadcasts
         from research_lab.pipeline.runner import topological_sort
@@ -196,6 +215,58 @@ async def run_pipeline(experiment_id: str, request: Request) -> dict:
         _run_pipeline_background(experiment_id, request)
     )
     return {"status": "started", "experiment_id": experiment_id}
+
+
+@router.get("/{experiment_id}/kernel/namespace")
+async def inspect_namespace(experiment_id: str, request: Request) -> dict:
+    """Inspect the kernel namespace for an experiment.
+
+    Returns a mapping of variable names to info dicts containing type, repr,
+    and optionally shape/len.
+    """
+    import json as _json
+
+    sessions = request.app.state.sessions
+    kernel = await sessions.get(experiment_id)
+    if kernel is None:
+        raise HTTPException(404, "No active kernel for this experiment")
+
+    _inspect_code = '''
+import json as _rlinspect_json
+_rl_vars = {}
+for _rl_name, _rl_val in globals().items():
+    if not _rl_name.startswith('_') and _rl_name not in ('In', 'Out', 'get_ipython', 'exit', 'quit', 'ctx'):
+        _rl_type = type(_rl_val).__name__
+        _rl_repr = repr(_rl_val)[:200]
+        _rl_info = {"type": _rl_type, "repr": _rl_repr}
+        if hasattr(_rl_val, 'shape'):
+            _rl_info["shape"] = str(_rl_val.shape)
+        if hasattr(_rl_val, '__len__'):
+            try: _rl_info["len"] = len(_rl_val)
+            except: pass
+        _rl_vars[_rl_name] = _rl_info
+print(_rlinspect_json.dumps(_rl_vars))
+'''
+
+    text = ""
+    try:
+        async for chunk in kernel.execute(_inspect_code):
+            if chunk.kind == "stdout":
+                text += chunk.text
+            elif chunk.kind == "error":
+                raise HTTPException(500, f"Kernel error: {chunk.text}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to inspect namespace: {exc}")
+
+    if not text.strip():
+        return {}
+
+    try:
+        return _json.loads(text.strip())
+    except _json.JSONDecodeError:
+        raise HTTPException(500, "Failed to parse namespace data")
 
 
 @router.get("/{experiment_id}/results")

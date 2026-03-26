@@ -84,6 +84,25 @@ async def broadcast_canvas_update(
     })
 
 
+async def broadcast_progress(
+    mgr: ConnectionManager,
+    experiment_id: str,
+    step_name: str,
+    current: int,
+    total: int,
+    message: str,
+) -> None:
+    """Broadcast a progress update event."""
+    await mgr.broadcast({
+        "type": "progress",
+        "experiment_id": experiment_id,
+        "step_name": step_name,
+        "current": current,
+        "total": total,
+        "message": message,
+    })
+
+
 async def _gpu_stats_loop(mgr: ConnectionManager) -> None:
     """Periodically broadcast GPU stats to all connected clients."""
     while True:

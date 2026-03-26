@@ -112,6 +112,23 @@ async def create_experiment(
         return exp.model_dump()
 
 
+@mcp.tool()
+async def inspect_namespace(experiment_id: str) -> dict[str, Any]:
+    """Inspect the kernel namespace for a running experiment.
+
+    Returns a mapping of variable names to info dicts containing:
+    - type: the Python type name
+    - repr: a truncated repr (max 200 chars)
+    - shape: (if applicable) tensor/array shape
+    - len: (if applicable) collection length
+
+    Useful for debugging, checking what variables are in scope,
+    and verifying tensor shapes during ML workflows.
+    """
+    async with _get_client() as client:
+        return await client.inspect_namespace(experiment_id)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

@@ -281,3 +281,103 @@ def download_cmd(ctx: click.Context, remote_path: str, local_path: str) -> None:
 
     data = _run(_run_download())
     _output(data, ctx)
+
+
+# ---------------------------------------------------------------------------
+# inspect
+# ---------------------------------------------------------------------------
+
+@click.command()
+@click.argument("experiment_id")
+@click.pass_context
+def inspect_cmd(ctx: click.Context, experiment_id: str) -> None:
+    """Inspect the kernel namespace for an experiment."""
+    async def _run_inspect():
+        client = _get_client()
+        async with client:
+            return await client.inspect_namespace(experiment_id)
+
+    data = _run(_run_inspect())
+    _output(data, ctx)
+
+
+# ---------------------------------------------------------------------------
+# tail
+# ---------------------------------------------------------------------------
+
+@click.command()
+@click.argument("experiment_id")
+@click.argument("step_name")
+@click.pass_context
+def tail_cmd(ctx: click.Context, experiment_id: str, step_name: str) -> None:
+    """Stream live output from a running step via WebSocket."""
+    import httpx
+
+    from research_lab.config import read_lockfile
+
+    lock = read_lockfile()
+    if lock is None:
+        click.echo("Error: Could not discover research-lab server.", err=True)
+        sys.exit(1)
+
+    base_url = lock["url"].rstrip("/")
+    ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://") + "/api/ws"
+
+    async def _stream():
+        async with httpx.AsyncClient() as _unused:
+            try:
+                import websockets
+            except ImportError:
+                click.echo(
+                    "Error: 'websockets' package required for tail. "
+                    "Install with: pip install websockets",
+                    err=True,
+                )
+                return
+
+            click.echo(f"Connecting to {ws_url} ...", err=True)
+            click.echo(
+                f"Streaming output for {experiment_id}/{step_name} (Ctrl+C to stop)",
+                err=True,
+            )
+            try:
+                async with websockets.connect(ws_url) as ws:
+                    while True:
+                        raw = await ws.recv()
+                        try:
+                            msg = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        msg_exp = msg.get("experiment_id", "")
+                        msg_step = msg.get("step_name", "")
+
+                        # Filter for our experiment/step
+                        if msg_exp != experiment_id or msg_step != step_name:
+                            continue
+
+                        msg_type = msg.get("type", "")
+                        if msg_type == "stdout":
+                            click.echo(msg.get("text", ""), nl=False)
+                        elif msg_type == "stderr":
+                            click.echo(msg.get("text", ""), nl=False, err=True)
+                        elif msg_type == "error":
+                            click.echo(f"ERROR: {msg.get('text', '')}", err=True)
+                        elif msg_type == "progress":
+                            current = msg.get("current", 0)
+                            total = msg.get("total", 0)
+                            message = msg.get("message", "")
+                            pct = f"{current}/{total}"
+                            if message:
+                                pct += f" - {message}"
+                            click.echo(f"[progress] {pct}", err=True)
+                        elif msg_type == "step_completed":
+                            status = msg.get("status", "unknown")
+                            click.echo(f"\nStep completed: {status}", err=True)
+                            break
+            except KeyboardInterrupt:
+                click.echo("\nDisconnected.", err=True)
+            except Exception as exc:
+                click.echo(f"WebSocket error: {exc}", err=True)
+
+    _run(_stream())
