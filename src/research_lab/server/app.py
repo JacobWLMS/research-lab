@@ -82,6 +82,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Mount frontend static files — check multiple locations
     import os
+    from fastapi.responses import HTMLResponse
+
+    frontend_dir: str | None = None
     frontend_candidates = [
         os.environ.get("RESEARCHLAB_STATIC_DIR", ""),
         str(Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"),
@@ -90,8 +93,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ]
     for candidate in frontend_candidates:
         if candidate and Path(candidate).is_dir() and (Path(candidate) / "index.html").exists():
-            app.mount("/", StaticFiles(directory=candidate, html=True), name="frontend")
+            frontend_dir = candidate
+            # Mount static assets (JS, CSS, etc.) under /assets
+            assets_dir = Path(candidate) / "assets"
+            if assets_dir.is_dir():
+                app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
             logger.info("Serving frontend from %s", candidate)
             break
+
+    # SPA catch-all: serve index.html for any non-API route
+    # This must come AFTER all API routes are registered
+    if frontend_dir:
+        index_html = (Path(frontend_dir) / "index.html").read_text()
+
+        @app.get("/{path:path}", response_class=HTMLResponse, include_in_schema=False)
+        async def spa_fallback(path: str) -> HTMLResponse:
+            return HTMLResponse(content=index_html)
 
     return app
