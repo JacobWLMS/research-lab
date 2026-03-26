@@ -106,11 +106,11 @@ watch(
         runAllDisabled: runAllDisabled.value,
         onRunPipeline: () => { if (!runAllDisabled.value) runPipeline() },
         onAddStep: openAddStep,
-        onRefreshDetail: () => {
+        onRefreshDetail: async () => {
           const id = experimentId.value
           if (id) {
-            fetchExperiment(id)
-            fetchResults(id)
+            await fetchExperiment(id)
+            await fetchResults(id)
           }
         },
       })

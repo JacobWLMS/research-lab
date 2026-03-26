@@ -1,4 +1,4 @@
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type {
   Experiment,
@@ -12,20 +12,257 @@ import { useWebSocket } from './useWebSocket'
 import { useToast } from './useToast'
 import { useExperiments } from './useExperiments'
 
-export function useExperimentDetail(experimentId: () => string | null) {
-  const experiment = ref<Experiment | null>(null)
-  const results = ref<Record<string, StepResult>>({})
-  const canvases = ref<Record<string, CanvasData[]>>({})
-  const outputLines = ref<Record<string, string[]>>({})
-  const liveMetrics = ref<Record<string, Record<string, number | string>>>({})
-  const progress = ref<Record<string, { current: number; total: number; eta_s?: number }>>({})
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const pipelineRunning = ref(false)
+// ---------------------------------------------------------------------------
+// Module-scope singleton state — survives component mount/unmount cycles.
+// Every call to useExperimentDetail() returns the SAME refs.
+// ---------------------------------------------------------------------------
+const experiment = ref<Experiment | null>(null)
+const results = ref<Record<string, StepResult>>({})
+const canvases = ref<Record<string, CanvasData[]>>({})
+const outputLines = ref<Record<string, string[]>>({})
+const liveMetrics = ref<Record<string, Record<string, number | string>>>({})
+const progress = ref<Record<string, { current: number; total: number; eta_s?: number }>>({})
+const loading = ref(false)
+const error = ref<string | null>(null)
+const pipelineRunning = ref(false)
 
-  const { subscribe, send } = useWebSocket()
+// Track which experiment the singleton is currently loaded for, and whether
+// the WebSocket subscription has been wired up.
+let currentExperimentId: string | null = null
+let wsSubscribed = false
+
+// ---------------------------------------------------------------------------
+// Helpers (module-private)
+// ---------------------------------------------------------------------------
+
+function findStep(name: string): Step | undefined {
+  return experiment.value?.steps.find((s) => s.name === name)
+}
+
+/**
+ * After fetchExperiment() replaces `experiment.value` wholesale, merge live
+ * step statuses that the WebSocket may have set (e.g. "running") into the
+ * fresh data so we don't lose in-flight status changes.
+ */
+function mergeStepStatuses(fresh: Experiment, liveStatuses: Map<string, StepStatus>): Experiment {
+  for (const step of fresh.steps) {
+    const live = liveStatuses.get(step.name)
+    // If the WebSocket said the step is "running" but the server still says
+    // "pending", keep the optimistic "running" flag.
+    if (live === 'running' && step.status !== 'running') {
+      step.status = live
+    }
+  }
+  return fresh
+}
+
+/**
+ * Hydrate `outputLines` from persisted result stdout/stderr so that log
+ * output survives refresh and navigation.
+ */
+function hydrateOutputFromResults() {
+  for (const [stepName, result] of Object.entries(results.value)) {
+    // Only fill in if we have no live lines for this step yet (don't
+    // overwrite a currently-streaming step).
+    if (result.stdout && (!outputLines.value[stepName] || outputLines.value[stepName].length === 0)) {
+      outputLines.value = {
+        ...outputLines.value,
+        [stepName]: result.stdout.split('\n').filter(Boolean),
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
+
+async function fetchExperiment(id: string) {
+  // Lazily grab singletons — safe because these are also module-scoped singletons.
   const toast = useToast()
   const router = useRouter()
+
+  loading.value = true
+  error.value = null
+
+  // Snapshot running statuses so we can merge them after the fetch
+  const liveStatuses = new Map<string, StepStatus>()
+  if (experiment.value) {
+    for (const step of experiment.value.steps) {
+      if (step.status === 'running') {
+        liveStatuses.set(step.name, step.status)
+      }
+    }
+  }
+
+  try {
+    const res = await fetch(`/api/experiments/${id}`)
+    if (res.status === 404) {
+      experiment.value = null
+      toast.info('Experiment not found')
+      router.push('/')
+      return
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const fresh: Experiment = await res.json()
+    experiment.value = mergeStepStatuses(fresh, liveStatuses)
+  } catch (e) {
+    error.value = (e as Error).message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchResults(id: string) {
+  try {
+    const res = await fetch(`/api/experiments/${id}/results`)
+    if (!res.ok) return
+    const data = await res.json()
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      results.value = data as Record<string, StepResult>
+
+      // Populate canvases from results — critical for persistence after
+      // navigation. Canvases are stored in result JSON on disk.
+      const newCanvases: Record<string, CanvasData[]> = {}
+      for (const [stepName, result] of Object.entries(data)) {
+        const r = result as any
+        if (r?.canvases && Array.isArray(r.canvases) && r.canvases.length > 0) {
+          newCanvases[stepName] = r.canvases.map((c: any) => ({
+            name: c.canvas_name || c.name || 'Output',
+            widgets: c.widgets || [],
+          }))
+        }
+      }
+      // Merge: persisted canvases first, live updates win on conflict
+      canvases.value = { ...newCanvases, ...canvases.value }
+
+      // Hydrate output lines from result stdout so logs persist across
+      // refresh and navigation.
+      hydrateOutputFromResults()
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
+// No-op: summaries from fetchResults() are sufficient for the UI.
+// Full canvas data is lazy-loaded by CanvasReport.vue per-step.
+async function fetchStepCanvases(_id: string) {}
+
+// ---------------------------------------------------------------------------
+// WebSocket subscription — wired up exactly once for the singleton.
+// ---------------------------------------------------------------------------
+
+function ensureWsSubscription(experimentId: () => string | null) {
+  if (wsSubscribed) return
+  wsSubscribed = true
+
+  const { subscribe } = useWebSocket()
+  const toast = useToast()
+  const { fetchExperiments } = useExperiments()
+
+  subscribe((msg: WsMessage) => {
+    const id = experimentId()
+    if (!id) return
+
+    // Filter to current experiment (except gpu_stats which is global)
+    if ('experiment_id' in msg && msg.experiment_id !== id) return
+
+    switch (msg.type) {
+      case 'step_started': {
+        const step = findStep(msg.step_name)
+        if (step) step.status = 'running' as StepStatus
+        outputLines.value = { ...outputLines.value, [msg.step_name]: [] }
+        liveMetrics.value = { ...liveMetrics.value, [msg.step_name]: {} }
+        progress.value = { ...progress.value, [msg.step_name]: { current: 0, total: 0 } }
+        break
+      }
+
+      case 'stdout': {
+        if (!outputLines.value[msg.step_name]) outputLines.value[msg.step_name] = []
+        outputLines.value[msg.step_name] = [...outputLines.value[msg.step_name], msg.text]
+        break
+      }
+
+      case 'stderr': {
+        if (!outputLines.value[msg.step_name]) outputLines.value[msg.step_name] = []
+        outputLines.value[msg.step_name] = [...outputLines.value[msg.step_name], msg.text]
+        break
+      }
+
+      case 'step_completed': {
+        const step = findStep(msg.step_name)
+        if (step) step.status = msg.status as StepStatus
+        fetchResults(id).then(() => fetchStepCanvases(id))
+        fetchExperiments()
+        if (msg.status === 'completed') {
+          toast.success(`Step "${msg.step_name}" completed (${msg.duration_s.toFixed(1)}s)`)
+        } else {
+          toast.error(`Step "${msg.step_name}" failed`)
+        }
+        break
+      }
+
+      case 'metrics_live': {
+        liveMetrics.value[msg.step_name] = {
+          ...liveMetrics.value[msg.step_name],
+          ...msg.data,
+        }
+        break
+      }
+
+      case 'canvas_update': {
+        if (!canvases.value[msg.step_name]) canvases.value[msg.step_name] = []
+        const arr = canvases.value[msg.step_name]
+        const idx = arr.findIndex((c) => c.name === msg.canvas_name)
+        const canvas: CanvasData = { name: msg.canvas_name, widgets: msg.widgets }
+        if (idx >= 0) {
+          arr[idx] = canvas
+        } else {
+          arr.push(canvas)
+        }
+        break
+      }
+
+      case 'progress': {
+        progress.value[msg.step_name] = {
+          current: msg.current,
+          total: msg.total,
+          eta_s: msg.eta_s,
+        }
+        break
+      }
+
+      case 'pipeline_completed': {
+        pipelineRunning.value = false
+        fetchExperiment(id)
+        fetchResults(id)
+        fetchExperiments()
+        toast.success('Pipeline finished')
+        break
+      }
+
+      case 'experiment_deleted': {
+        if (msg.experiment_id === id) {
+          experiment.value = null
+          toast.info('Experiment was deleted')
+          const router = useRouter()
+          router.push('/')
+        }
+        fetchExperiments()
+        break
+      }
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Public composable
+// ---------------------------------------------------------------------------
+
+export function useExperimentDetail(experimentId: () => string | null) {
+  const { send } = useWebSocket()
+  const toast = useToast()
   const { fetchExperiments } = useExperiments()
 
   const anyStepRunning = computed(() => {
@@ -33,78 +270,39 @@ export function useExperimentDetail(experimentId: () => string | null) {
     return experiment.value.steps.some((s) => s.status === 'running')
   })
 
-  // Helper to find and mutate a step
-  function findStep(name: string): Step | undefined {
-    return experiment.value?.steps.find((s) => s.name === name)
-  }
+  // Wire up WebSocket listener once (singleton, never torn down)
+  ensureWsSubscription(experimentId)
 
-  async function fetchExperiment(id: string) {
-    loading.value = true
-    error.value = null
-    try {
-      const res = await fetch(`/api/experiments/${id}`)
-      if (res.status === 404) {
-        // Experiment was deleted -- redirect to home
-        experiment.value = null
-        toast.info('Experiment not found')
-        router.push('/')
-        return
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      experiment.value = await res.json()
-    } catch (e) {
-      error.value = (e as Error).message
-    } finally {
-      loading.value = false
+  // Watch for experiment ID changes — only reset when ID truly changes
+  watch(experimentId, async (id) => {
+    if (id === currentExperimentId) return // no-op if same experiment
+    currentExperimentId = id
+
+    if (id) {
+      // Reset transient state for the new experiment
+      outputLines.value = {}
+      liveMetrics.value = {}
+      canvases.value = {}
+      progress.value = {}
+      results.value = {}
+      pipelineRunning.value = false
+
+      await fetchExperiment(id)
+      await fetchResults(id)
+      await fetchStepCanvases(id)
+    } else {
+      experiment.value = null
     }
-  }
+  }, { immediate: true })
 
-  async function fetchResults(id: string) {
-    try {
-      const res = await fetch(`/api/experiments/${id}/results`)
-      if (!res.ok) return
-      const data = await res.json()
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        results.value = data as Record<string, StepResult>
-
-        // Populate canvases from results — this is critical for persistence
-        // after navigation. The canvases are stored in result JSON on disk
-        // and included in the results response.
-        const newCanvases: Record<string, CanvasData[]> = {}
-        for (const [stepName, result] of Object.entries(data)) {
-          const r = result as any
-          if (r?.canvases && Array.isArray(r.canvases) && r.canvases.length > 0) {
-            newCanvases[stepName] = r.canvases.map((c: any) => ({
-              name: c.canvas_name || c.name || 'Output',
-              widgets: c.widgets || [],
-            }))
-          }
-        }
-        // Merge with any existing live canvas data (don't overwrite live updates)
-        canvases.value = { ...newCanvases, ...canvases.value }
-      }
-    } catch {
-      // non-fatal
-    }
-  }
-
-  // Note: full canvas data is loaded on-demand by CanvasReport.vue
-  // when the user clicks "View Output". The results endpoint returns
-  // lightweight canvas summaries (widget types/counts, no base64 images)
-  // which is enough for the "View Output" button to appear.
-  async function fetchStepCanvases(_id: string) {
-    // No-op: summaries from fetchResults() are sufficient for the UI.
-    // Full canvas data is lazy-loaded by CanvasReport.vue per-step.
-  }
+  // --- Actions (close over experimentId getter) ---
 
   async function runStep(stepName: string) {
     const id = experimentId()
     if (!id) return
-    // Clear live state for this step
     outputLines.value[stepName] = []
     liveMetrics.value[stepName] = {}
     delete progress.value[stepName]
-    // Optimistically set running
     const step = findStep(stepName)
     if (step) step.status = 'running' as StepStatus
     try {
@@ -194,126 +392,6 @@ export function useExperimentDetail(experimentId: () => string | null) {
       pipelineRunning.value = false
     }
   }
-
-  // WebSocket handler for live updates
-  const unsubscribe = subscribe((msg: WsMessage) => {
-    const id = experimentId()
-    if (!id) return
-
-    // Filter to current experiment (except gpu_stats which is global)
-    if ('experiment_id' in msg && msg.experiment_id !== id) return
-
-    switch (msg.type) {
-      case 'step_started': {
-        const step = findStep(msg.step_name)
-        if (step) step.status = 'running' as StepStatus
-        outputLines.value = { ...outputLines.value, [msg.step_name]: [] }
-        liveMetrics.value = { ...liveMetrics.value, [msg.step_name]: {} }
-        progress.value = { ...progress.value, [msg.step_name]: { current: 0, total: 0 } }
-        break
-      }
-
-      case 'stdout': {
-        if (!outputLines.value[msg.step_name]) outputLines.value[msg.step_name] = []
-        outputLines.value[msg.step_name] = [...outputLines.value[msg.step_name], msg.text]
-        break
-      }
-
-      case 'stderr': {
-        if (!outputLines.value[msg.step_name]) outputLines.value[msg.step_name] = []
-        outputLines.value[msg.step_name] = [...outputLines.value[msg.step_name], msg.text]
-        break
-      }
-
-      case 'step_completed': {
-        const step = findStep(msg.step_name)
-        if (step) step.status = msg.status as StepStatus
-        fetchResults(id).then(() => fetchStepCanvases(id))
-        // Also refresh experiment list so sidebar status updates
-        fetchExperiments()
-        // Toast notification
-        if (msg.status === 'completed') {
-          toast.success(`Step "${msg.step_name}" completed (${msg.duration_s.toFixed(1)}s)`)
-        } else {
-          toast.error(`Step "${msg.step_name}" failed`)
-        }
-        break
-      }
-
-      case 'metrics_live': {
-        liveMetrics.value[msg.step_name] = {
-          ...liveMetrics.value[msg.step_name],
-          ...msg.data,
-        }
-        break
-      }
-
-      case 'canvas_update': {
-        if (!canvases.value[msg.step_name]) canvases.value[msg.step_name] = []
-        const arr = canvases.value[msg.step_name]
-        const idx = arr.findIndex((c) => c.name === msg.canvas_name)
-        const canvas: CanvasData = { name: msg.canvas_name, widgets: msg.widgets }
-        if (idx >= 0) {
-          arr[idx] = canvas
-        } else {
-          arr.push(canvas)
-        }
-        break
-      }
-
-      case 'progress': {
-        progress.value[msg.step_name] = {
-          current: msg.current,
-          total: msg.total,
-          eta_s: msg.eta_s,
-        }
-        break
-      }
-
-      case 'pipeline_completed': {
-        pipelineRunning.value = false
-        // Re-fetch full experiment to sync statuses
-        fetchExperiment(id)
-        fetchResults(id)
-        fetchExperiments()
-        toast.success('Pipeline finished')
-        break
-      }
-
-      case 'experiment_deleted': {
-        if (msg.experiment_id === id) {
-          experiment.value = null
-          toast.info('Experiment was deleted')
-          router.push('/')
-        }
-        // Also refresh the sidebar experiment list
-        fetchExperiments()
-        break
-      }
-    }
-  })
-
-  // Watch for experiment ID changes -- reset state and reload
-  watch(experimentId, async (id) => {
-    if (id) {
-      outputLines.value = {}
-      liveMetrics.value = {}
-      canvases.value = {}
-      progress.value = {}
-      results.value = {}
-      pipelineRunning.value = false
-      await fetchExperiment(id)
-      await fetchResults(id)
-      // Fetch per-step canvases as a fallback (ensures canvas data survives navigation)
-      await fetchStepCanvases(id)
-    } else {
-      experiment.value = null
-    }
-  }, { immediate: true })
-
-  onUnmounted(() => {
-    unsubscribe()
-  })
 
   return {
     experiment,
