@@ -85,7 +85,7 @@ class PipelineRunner:
         self._on_progress = on_progress
 
     async def run_pipeline(self, experiment_id: str) -> list[StepResult]:
-        """Run all steps in dependency order. Returns results."""
+        """Run all steps in dependency order. Skips already-completed steps."""
         exp = self._store.get(experiment_id)
         if exp is None:
             raise ValueError(f"Experiment {experiment_id!r} not found")
@@ -94,6 +94,14 @@ class PipelineRunner:
         results: list[StepResult] = []
 
         for step in ordered:
+            # Skip steps that already completed successfully
+            if step.status == StepStatus.completed:
+                existing = self._store.get_result(experiment_id, step.name)
+                if existing:
+                    results.append(existing)
+                    logger.info("Skipping already-completed step %s", step.name)
+                    continue
+
             result = await self.run_step(experiment_id, step.name)
             results.append(result)
             if result.status == "failed":

@@ -168,33 +168,19 @@ async def _run_pipeline_background(
             kernel, store, on_chunk=on_chunk, on_canvas=on_canvas, on_progress=on_progress
         )
 
-        # Run each step with lifecycle broadcasts
-        from research_lab.pipeline.runner import topological_sort
+        # Use runner.run_pipeline which handles dependency order,
+        # skips completed steps, and auto-runs dependencies
+        results = await runner.run_pipeline(experiment_id)
 
-        ordered = topological_sort(exp.steps)
-        for step in ordered:
-            await mgr.broadcast({
-                "type": "step_started",
-                "experiment_id": experiment_id,
-                "step_name": step.name,
-            })
-            t0 = time.monotonic()
-            result = await runner.run_step(experiment_id, step.name)
-            elapsed = round(time.monotonic() - t0, 1)
+        # Broadcast completion for each step that ran
+        for result in results:
             await mgr.broadcast({
                 "type": "step_completed",
                 "experiment_id": experiment_id,
-                "step_name": step.name,
+                "step_name": result.step_name,
                 "status": result.status,
-                "duration_s": elapsed,
+                "duration_s": result.execution_time_s,
             })
-            if result.status == "failed":
-                logger.warning(
-                    "Step %s failed in experiment %s, halting pipeline",
-                    step.name,
-                    experiment_id,
-                )
-                break
 
         # Broadcast pipeline-level completion
         await mgr.broadcast({
