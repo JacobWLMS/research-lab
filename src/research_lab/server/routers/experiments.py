@@ -269,26 +269,58 @@ print(_rlinspect_json.dumps(_rl_vars))
 
 @router.get("/{experiment_id}/results")
 async def get_all_results(experiment_id: str, request: Request) -> dict:
-    """Return a mapping of step_name -> StepResult (with canvases) for the experiment.
+    """Return a mapping of step_name -> StepResult for the experiment.
 
-    The response is a JSON object keyed by step name, e.g.::
-
-        {"train": {..., "canvases": [...]}, "evaluate": {..., "canvases": [...]}}
+    Canvas data is returned as lightweight summaries (widget counts and types)
+    to avoid sending megabytes of base64 image data on every load.
+    Full canvas data should be fetched per-step via GET /steps/{name} or
+    GET /steps/{name}/runs/{N} when the user opens the output view.
     """
     store = request.app.state.store
     exp = store.get(experiment_id)
     if exp is None:
         raise HTTPException(404, f"Experiment {experiment_id!r} not found")
     results = store.get_all_results(experiment_id)
-    # Enrich each result with its persisted canvas data
     enriched: dict[str, dict] = {}
     for step_name, result in results.items():
         result_dict = result.model_dump()
-        # Merge in canvases from separate file if the result itself has none
-        if not result_dict.get("canvases"):
-            result_dict["canvases"] = store.get_canvases(experiment_id, step_name)
+        # Strip heavy base64 image data from inline result images
+        for img in result_dict.get("images", []):
+            if len(img.get("data", "")) > 1000:
+                img["data"] = ""
+                img["_truncated"] = True
+        # Include canvas SUMMARIES (not full data) so the UI knows canvases exist
+        raw_canvases = result_dict.get("canvases") or store.get_canvases(experiment_id, step_name)
+        result_dict["canvases"] = _summarize_canvases(raw_canvases)
         enriched[step_name] = result_dict
     return enriched
+
+
+def _summarize_canvases(canvases: list[dict]) -> list[dict]:
+    """Return lightweight canvas summaries — widget types/counts, no heavy data."""
+    summaries = []
+    for canvas in canvases:
+        widgets_summary = []
+        for w in canvas.get("widgets", []):
+            summary = {"kind": w.get("kind", "unknown")}
+            if w.get("kind") == "chart":
+                summary["title"] = w.get("title", "")
+            elif w.get("kind") == "metrics":
+                summary["data"] = w.get("data", {})  # metrics are small
+            elif w.get("kind") == "text":
+                summary["content"] = w.get("content", "")  # text is small
+            elif w.get("kind") == "image":
+                summary["title"] = w.get("title", "")
+                summary["mime"] = w.get("mime", "image/png")
+                # DON'T include the base64 data — that's the whole point
+            widgets_summary.append(summary)
+        summaries.append({
+            "canvas_name": canvas.get("canvas_name", canvas.get("name", "")),
+            "name": canvas.get("canvas_name", canvas.get("name", "")),
+            "widgets": widgets_summary,
+            "widget_count": len(widgets_summary),
+        })
+    return summaries
 
 
 # ---------------------------------------------------------------------------

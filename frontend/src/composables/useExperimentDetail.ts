@@ -88,30 +88,13 @@ export function useExperimentDetail(experimentId: () => string | null) {
     }
   }
 
-  async function fetchStepCanvases(id: string) {
-    // Also fetch canvases per-step for any that the results endpoint missed
-    if (!experiment.value) return
-    for (const step of experiment.value.steps) {
-      if (step.status === 'completed' || step.status === 'failed') {
-        try {
-          const res = await fetch(`/api/experiments/${id}/steps/${step.name}`)
-          if (!res.ok) continue
-          const data = await res.json()
-          const stepCanvases = data?.canvases || data?.result?.canvases || []
-          if (stepCanvases.length > 0 && !canvases.value[step.name]?.length) {
-            canvases.value = {
-              ...canvases.value,
-              [step.name]: stepCanvases.map((c: any) => ({
-                name: c.canvas_name || c.name || 'Output',
-                widgets: c.widgets || [],
-              })),
-            }
-          }
-        } catch {
-          // non-fatal
-        }
-      }
-    }
+  // Note: full canvas data is loaded on-demand by CanvasReport.vue
+  // when the user clicks "View Output". The results endpoint returns
+  // lightweight canvas summaries (widget types/counts, no base64 images)
+  // which is enough for the "View Output" button to appear.
+  async function fetchStepCanvases(_id: string) {
+    // No-op: summaries from fetchResults() are sufficient for the UI.
+    // Full canvas data is lazy-loaded by CanvasReport.vue per-step.
   }
 
   async function runStep(stepName: string) {
