@@ -1,4 +1,5 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import type {
   Experiment,
   Step,
@@ -24,6 +25,7 @@ export function useExperimentDetail(experimentId: () => string | null) {
 
   const { subscribe, send } = useWebSocket()
   const toast = useToast()
+  const router = useRouter()
   const { fetchExperiments } = useExperiments()
 
   const anyStepRunning = computed(() => {
@@ -41,6 +43,13 @@ export function useExperimentDetail(experimentId: () => string | null) {
     error.value = null
     try {
       const res = await fetch(`/api/experiments/${id}`)
+      if (res.status === 404) {
+        // Experiment was deleted -- redirect to home
+        experiment.value = null
+        toast.info('Experiment not found')
+        router.push('/')
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       experiment.value = await res.json()
     } catch (e) {
@@ -243,6 +252,17 @@ export function useExperimentDetail(experimentId: () => string | null) {
         fetchResults(id)
         fetchExperiments()
         toast.success('Pipeline finished')
+        break
+      }
+
+      case 'experiment_deleted': {
+        if (msg.experiment_id === id) {
+          experiment.value = null
+          toast.info('Experiment was deleted')
+          router.push('/')
+        }
+        // Also refresh the sidebar experiment list
+        fetchExperiments()
         break
       }
     }

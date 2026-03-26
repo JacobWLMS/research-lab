@@ -107,7 +107,10 @@ class PipelineRunner:
         return results
 
     async def run_step(self, experiment_id: str, step_name: str) -> StepResult:
-        """Execute a single step and persist the result."""
+        """Execute a single step and persist the result.
+
+        Automatically runs any dependencies that have not yet completed.
+        """
         exp = self._store.get(experiment_id)
         if exp is None:
             raise ValueError(f"Experiment {experiment_id!r} not found")
@@ -115,6 +118,30 @@ class PipelineRunner:
         step = next((s for s in exp.steps if s.name == step_name), None)
         if step is None:
             raise ValueError(f"Step {step_name!r} not found")
+
+        # Auto-run pending dependencies (recursively)
+        for dep_name in step.depends_on:
+            dep_step = next((s for s in exp.steps if s.name == dep_name), None)
+            if dep_step is None:
+                raise ValueError(
+                    f"Dependency {dep_name!r} of step {step_name!r} not found"
+                )
+            if dep_step.status != StepStatus.completed:
+                logger.info(
+                    "Auto-running dependency %r before %r in experiment %s",
+                    dep_name,
+                    step_name,
+                    experiment_id,
+                )
+                dep_result = await self.run_step(experiment_id, dep_name)
+                if dep_result.status == "failed":
+                    raise ValueError(
+                        f"Dependency {dep_name!r} failed; cannot run {step_name!r}"
+                    )
+                # Refresh experiment state after dependency ran
+                exp = self._store.get(experiment_id)
+                if exp is None:
+                    raise ValueError(f"Experiment {experiment_id!r} not found")
 
         # Mark running
         self._store.update_step(experiment_id, step_name, {"status": StepStatus.running})

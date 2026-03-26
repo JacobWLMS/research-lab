@@ -186,6 +186,11 @@ export interface WsStepAdded {
   experiment: Experiment
 }
 
+export interface WsExperimentDeleted {
+  type: 'experiment_deleted'
+  experiment_id: string
+}
+
 export type WsMessage =
   | WsStepStarted
   | WsStdout
@@ -199,6 +204,7 @@ export type WsMessage =
   | WsExecResult
   | WsExperimentCreated
   | WsStepAdded
+  | WsExperimentDeleted
 
 // ---------------------------------------------------------------------------
 // API response helpers

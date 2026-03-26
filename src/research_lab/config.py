@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     project_dir: Path = Field(default_factory=lambda: Path.cwd())
     log_level: str = "info"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    image_max_bytes: int = 100_000  # Max base64 image size for MCP responses
 
     @property
     def lab_dir(self) -> Path:

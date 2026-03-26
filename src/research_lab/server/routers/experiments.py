@@ -102,9 +102,14 @@ async def update_experiment(
 @router.delete("/{experiment_id}")
 async def delete_experiment(experiment_id: str, request: Request) -> dict[str, bool]:
     store = request.app.state.store
+    mgr: ConnectionManager = request.app.state.ws_manager
     deleted = store.delete(experiment_id)
     if not deleted:
         raise HTTPException(404, f"Experiment {experiment_id!r} not found")
+    await mgr.broadcast({
+        "type": "experiment_deleted",
+        "experiment_id": experiment_id,
+    })
     return {"deleted": True}
 
 

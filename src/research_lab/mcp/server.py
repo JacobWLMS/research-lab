@@ -27,6 +27,34 @@ mcp = FastMCP(
     ),
 )
 
+_PLACEHOLDER = "[image too large for MCP response - view in web UI]"
+
+
+def _get_image_max_bytes() -> int:
+    """Read image_max_bytes from settings, falling back to 100_000."""
+    try:
+        from research_lab.config import Settings
+        return Settings().image_max_bytes
+    except Exception:
+        return 100_000
+
+
+def _cap_images(result_dict: dict[str, Any], max_bytes: int | None = None) -> dict[str, Any]:
+    """Replace oversized base64 image data with a placeholder message.
+
+    Mutates *result_dict* in place and also returns it for convenience.
+    """
+    if max_bytes is None:
+        max_bytes = _get_image_max_bytes()
+    for img in result_dict.get("images", []):
+        if len(img.get("data", "")) > max_bytes:
+            img["data"] = _PLACEHOLDER
+    for canvas in result_dict.get("canvases", []):
+        for widget in canvas.get("widgets", []):
+            if widget.get("kind") == "image" and len(widget.get("data", "")) > max_bytes:
+                widget["data"] = _PLACEHOLDER
+    return result_dict
+
 
 def _get_client() -> ResearchLabClient:
     """Get a client, auto-starting the server if needed."""
@@ -85,7 +113,7 @@ async def exec(code: str) -> dict[str, Any]:
     """
     async with _get_client() as client:
         result = await client.exec_code(code)
-        return result.model_dump()
+        return _cap_images(result.model_dump())
 
 
 @mcp.tool()
@@ -96,7 +124,7 @@ async def run_experiment(experiment_id: str) -> list[dict[str, Any]]:
     """
     async with _get_client() as client:
         results = await client.run_experiment(experiment_id)
-        return [r.model_dump() for r in results]
+        return [_cap_images(r.model_dump()) for r in results]
 
 
 @mcp.tool()
@@ -107,7 +135,7 @@ async def run_step(experiment_id: str, step_name: str) -> dict[str, Any]:
     """
     async with _get_client() as client:
         result = await client.run_step(experiment_id, step_name)
-        return result.model_dump()
+        return _cap_images(result.model_dump())
 
 
 @mcp.tool()
@@ -128,7 +156,19 @@ async def get_results(
     Otherwise returns all step results for the experiment.
     """
     async with _get_client() as client:
-        return await client.get_results(experiment_id, step_name)
+        data = await client.get_results(experiment_id, step_name)
+        # Cap images in each step result (data is either a single result dict
+        # or a dict keyed by step name containing result dicts).
+        if isinstance(data, dict):
+            # Check if this looks like a per-step mapping (keys are step names)
+            # vs a single result dict (has "step_name" key).
+            if "step_name" in data or "images" in data:
+                _cap_images(data)
+            else:
+                for _key, val in data.items():
+                    if isinstance(val, dict):
+                        _cap_images(val)
+        return data
 
 
 @mcp.tool()

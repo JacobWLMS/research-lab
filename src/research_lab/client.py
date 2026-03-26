@@ -142,7 +142,10 @@ class ResearchLabClient:
         # callback once per step.
         reported: set[str] = set()
 
-        # Poll until every step that was "running" has settled.
+        # Poll until every step has reached a terminal state (completed/failed).
+        # Steps that remain "pending" after others have run means the pipeline
+        # halted early (e.g. a dependency failed), so we treat that as done too,
+        # but only after at least one step has actually executed.
         while True:
             await asyncio.sleep(poll_interval)
             exp_data = await self._get(f"/api/experiments/{experiment_id}")
@@ -165,18 +168,24 @@ class ResearchLabClient:
                         on_step_done(sname, s["status"], exec_time)
                         reported.add(sname)
 
-            all_done = all(
-                s["status"] in ("completed", "failed", "pending") for s in steps
+            # Check: nothing is still running
+            none_running = all(
+                s["status"] != "running" for s in steps
             )
             any_ran = any(s["status"] in ("completed", "failed") for s in steps)
-            if all_done and any_ran:
+            if none_running and any_ran:
                 break
 
-        # Collect final results
+        # Collect final results -- the endpoint returns a dict keyed by step name.
         results_data = await self._get(f"/api/experiments/{experiment_id}/results")
         results: list[StepResult] = []
-        for _name, r in results_data.items():
-            results.append(StepResult.model_validate(r))
+        if isinstance(results_data, dict):
+            for _name, r in results_data.items():
+                if isinstance(r, dict):
+                    results.append(StepResult.model_validate(r))
+        elif isinstance(results_data, list):
+            for r in results_data:
+                results.append(StepResult.model_validate(r))
         return results
 
     async def get_results(
