@@ -34,11 +34,16 @@ class ResearchLabClient:
         timeout: float = 300.0,
     ) -> None:
         if base_url is None:
+            # Check env var first — allows pointing at remote servers (RunPod tunnel etc.)
+            import os
+            base_url = os.environ.get("RESEARCH_LAB_URL")
+        if base_url is None:
             lock = read_lockfile(project_dir)
             if lock is None:
                 raise RuntimeError(
                     "Could not discover research-lab server. "
-                    "Is it running? (research-lab server start)"
+                    "Is it running? (research-lab server start)\n"
+                    "Or set RESEARCH_LAB_URL=https://your-tunnel.trycloudflare.com"
                 )
             base_url = lock["url"]
         self._base = base_url.rstrip("/")
