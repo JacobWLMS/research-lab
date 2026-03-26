@@ -119,3 +119,7 @@ async def create_experiment(
 def run_mcp_server() -> None:
     """Run the MCP server with stdio transport."""
     mcp.run(transport="stdio")
+
+
+if __name__ == "__main__":
+    run_mcp_server()
