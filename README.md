@@ -1,5 +1,10 @@
 # research-lab
 
+<!-- Badges placeholder -->
+<!-- [![PyPI](https://img.shields.io/pypi/v/research-lab)](https://pypi.org/project/research-lab/) -->
+<!-- [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) -->
+<!-- [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/) -->
+
 AI-first ML experiment management platform. Run experiments as pipelines of named steps, get structured JSON results for AI analysis, and rich visual canvas reports for human review.
 
 ## Quick Start
@@ -45,7 +50,7 @@ research-lab experiments create my_experiment
 research-lab experiments run my_experiment
 ```
 
-Steps execute in dependency order in a persistent IPython kernel — variables from step 1 are available in step 2.
+Steps execute in dependency order in a persistent IPython kernel -- variables from step 1 are available in step 2.
 
 ### LabContext API
 Every step has access to a `ctx` object for structured output:
@@ -79,14 +84,14 @@ Click "View Report" on any step to open the full-screen canvas.
 
 ### Three Interfaces
 
-**CLI** — AI-friendly, JSON output by default:
+**CLI** -- AI-friendly, JSON output by default:
 ```bash
 research-lab exec "print('hello')"
 research-lab status
 research-lab results my_experiment train_step
 ```
 
-**MCP Server** — native Claude Code integration:
+**MCP Server** -- native Claude Code integration:
 ```json
 {
   "mcpServers": {
@@ -98,7 +103,7 @@ research-lab results my_experiment train_step
 }
 ```
 
-**Web UI** — Vue 3 + Tailwind with Gruvbox theme:
+**Web UI** -- Vue 3 + Tailwind with Gruvbox theme:
 - Master-detail layout with experiment list and pipeline visualization
 - Light/dark mode, zoom controls, keyboard shortcuts
 - Real-time WebSocket updates during execution
@@ -107,6 +112,23 @@ research-lab results my_experiment train_step
 ### Compute Backends
 - **Local**: IPython kernel on your machine
 - **RunPod**: SSH tunnel to remote GPU kernel
+
+<!-- Screenshots placeholder -->
+<!-- ## Screenshots -->
+<!-- ![Dashboard](docs/screenshots/dashboard.png) -->
+<!-- ![Canvas Report](docs/screenshots/canvas.png) -->
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[API Reference](docs/API.md)** | Complete REST API and WebSocket protocol |
+| **[CLI Reference](docs/CLI.md)** | All commands, options, and environment variables |
+| **[MCP Reference](docs/MCP.md)** | MCP server setup, tools, and troubleshooting |
+| **[LabContext (ctx) API](docs/CTX_API.md)** | In-kernel ctx methods, canvas API, serialization |
+| **[Architecture](docs/ARCHITECTURE.md)** | System design, data flow, and file structure |
+| **[Deployment Guide](docs/DEPLOYMENT.md)** | Local dev, RunPod, frontend, and MCP configuration |
+| **[AI Agent Instructions](CLAUDE.md)** | Quick reference for AI coding assistants |
 
 ## Tech Stack
 
